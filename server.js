@@ -1,23 +1,41 @@
-// server.js — Express + WebSocket realtime speed check (OSM Overpass)
-// Run: node server.js  (requires "type":"module" in package.json)
+/*
+ * server.js
+ *
+ * Mục đích:
+ *   - Cung cấp REST API /limit và /compare để truy vấn giới hạn tốc độ xung quanh 1 toạ độ
+ *     (dùng OSM Overpass) và trả về kết quả so sánh với tốc độ gửi lên.
+ *   - Cung cấp WebSocket endpoint tại /ws cho các client (ví dụ ESP32) gửi vị trí+tốc độ
+ *     và nhận về kết quả so sánh (overMax / underMin).
+ *
+ * Endpoints chính:
+ *   - GET  /limit?lat=<lat>&lng=<lng>
+ *   - POST /compare   { lat, lng, speedKmh, margin }
+ *   - WS   /ws         (nhận JSON { lat, lng, speedKmh, margin })
+ *
+ * Cấu hình qua biến môi trường:
+ *   - OVERPASS_URL (mặc định: https://overpass-api.de/api/interpreter)
+ *   - PORT (mặc định: 3000)
+ *
+ * Chạy: node server.js  (package.json có "type": "module")
+ */
 
 import express from "express";
 import fetch from "node-fetch";
 import http from "http";
 import { WebSocketServer } from "ws";
 
-// ======= Config =======
+// Config
 const OVERPASS_URL = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 const PORT = process.env.PORT || 3000;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 const DEFAULT_MARGIN = 5;             // km/h
 
-// ======= App & HTTP server =======
+// App & HTTP server
 const app = express();
 app.use(express.json());
 const server = http.createServer(app);
 
-// ======= Tiny cache =======
+// Tiny cache
 const cache = new Map(); // key -> { value, expires }
 const coordKey = (lat, lng) => `${lat.toFixed(5)},${lng.toFixed(5)}`;
 const setCache = (k, v, ttl = CACHE_TTL_MS) => cache.set(k, { v, e: Date.now() + ttl });
@@ -28,13 +46,13 @@ const getCache = (k) => {
   return c.v;
 };
 
-// ======= Logging helpers =======
+// Logging helpers
 const ts = () => new Date().toISOString();
 const log = (...args) => console.log(`[${ts()}]`, ...args);
 const round = (x, d = 3) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
 const shortCoord = (lat, lng) => `${round(lat, 5)},${round(lng, 5)}`;
 
-// ======= Helpers =======
+// Helpers
 function parseSpeed(raw) {
   if (!raw) return null;
   const s = String(raw).trim().toLowerCase();
@@ -61,7 +79,7 @@ const FALLBACK_MAX_BY_HIGHWAY = {
   service: 20,
 };
 
-// Core: tìm speed limits gần (lat,lng) từ OSM (có thể fallback theo highway)
+// Core: tìm giới hạn tốc độ gần (lat,lng) từ OSM (có thể fallback theo highway)
 async function queryOSMSpeeds(lat, lng) {
   const k = coordKey(lat, lng);
   const cached = getCache(k);
@@ -131,7 +149,7 @@ async function queryOSMSpeeds(lat, lng) {
   return null;
 }
 
-// ==== REST: GET /limit & POST /compare (giữ nguyên để test Postman) ====
+// REST: GET /limit & POST /compare
 app.get("/limit", async (req, res) => {
   const lat = parseFloat(req.query.lat), lng = parseFloat(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: "invalid_lat_lng" });
@@ -192,10 +210,10 @@ app.post("/compare", async (req, res) => {
   }
 });
 
-// ======= WebSocket =======
+// WebSocket
 const wss = new WebSocketServer({ noServer: true });
 
-// Tùy chọn: giới hạn tần suất xử lý mỗi client (ms)
+// Rate-limit xử lý mỗi client (ms)
 const MIN_HANDLE_INTERVAL = 300; // 0.3s
 let WS_ID_SEQ = 1;
 
@@ -269,7 +287,7 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-// Heartbeat để dọn kết nối chết
+// Heartbeat: dọn kết nối chết
 const interval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();

@@ -1,3 +1,33 @@
+#/*******************************************************************************
+ * main.ino
+ *
+ * Mục đích:
+ *   - Mô phỏng/thu thập dữ liệu tốc độ + áp suất từ input Serial hoặc cảm biến.
+ *   - Hiển thị trạng thái trên OLED.
+ *   - Gửi dữ liệu vị trí/tốc độ tới một WebSocket server để so sánh giới hạn tốc độ (server chạy ở PC).
+ *
+ * Phần cứng:
+ *   - ESP32 (thư viện WiFi.h)
+ *   - OLED SSD1306 (I2C)
+ *
+ * Lệnh Serial (ví dụ để nhập thủ công khi phát triển):
+ *   - pos <lat>,<lng> <speed> <pressure>
+ *       (ví dụ: pos 21.0546,105.8684 72.5 1.23)  -> cập nhật toạ độ + speed + pressure, gửi ngay 1 gói WS
+ *   - pos <lat>,<lng>,<speed>,<pressure>
+ *   - gps <lat>,<lng>                           -> cập nhật toạ độ
+ *   - <speed> <pressure>                        -> ví dụ: "72.5 1.23"
+ *   - limit pmin=<bar> | limit pmax=<bar>      -> điều chỉnh ngưỡng áp suất
+ *
+ * Cấu hình nhanh trong file:
+ *   - WIFI_SSID / WIFI_PASS: cấu hình WiFi của bạn
+ *   - WS_HOST / WS_PORT / WS_PATH: thông tin server WebSocket (ví dụ ws://192.168.1.8:3000/ws)
+ *
+ * Ghi chú:
+ *   - File đã có các hàm phụ trợ để parse nhiều định dạng đầu vào. Các hàm hiển thị và cảnh báo
+ *     đã được tách ra thành các hàm nhỏ (showNormal, showAlert, updateLED).
+ *
+ * Ngày: 2025-11-05
+ ******************************************************************************/
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -21,23 +51,23 @@ const char* WS_PATH = "/ws";
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ----- trạng thái -----
+// Trạng thái
 WebSocketsClient ws;
 bool wsConnected = false;
 
 float speed_kmh    = 60.0f;   // nhập Serial
 float pressure_bar = 1.50f;   // nhập Serial hoặc từ cảm biến
 
-// === NGƯỠNG CỤC BỘ CHO ÁP SUẤT (BẬT LẠI) ===
+// Ngưỡng áp suất (cục bộ)
 float PRESSURE_LIMIT_MIN = 1.00f;  // bar
 float PRESSURE_LIMIT_MAX = 2.00f;  // bar
 
-// toạ độ (nhập Serial)
+// Toạ độ (Serial)
 bool  hasCoord = false;
 float gps_lat = 0.0f;
 float gps_lng = 0.0f;
 
-// phản hồi từ server (tốc độ)
+// Phản hồi server (tốc độ)
 bool  srv_overMax = false;
 bool  srv_underMin = false;
 int   srv_limit_kmh = -1;
@@ -53,7 +83,7 @@ bool blinkOn = false;
 
 String lineBuffer;
 
-// --------- helpers ----------
+// Helpers
 void drawCenteredText(const String &text, int16_t y, uint8_t textSize = 1) {
   int16_t x1, y1; uint16_t w, h;
   display.setTextSize(textSize);
@@ -70,7 +100,7 @@ void updateBlink() {
   if (now - lastBlinkMs >= BLINK_INTERVAL_MS) { lastBlinkMs = now; blinkOn = !blinkOn; }
 }
 
-// --------- hiển thị ----------
+// Hiển thị
 void showNormal() {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -140,7 +170,7 @@ void showAlert() {
   display.display();
 }
 
-// --------- LED ----------
+// LED
 void updateLED() {
   bool pressHigh = (pressure_bar > PRESSURE_LIMIT_MAX);
   bool pressLow  = (pressure_bar < PRESSURE_LIMIT_MIN);
@@ -148,7 +178,7 @@ void updateLED() {
   digitalWrite(LED_PIN, (alert && blinkOn) ? HIGH : LOW);
 }
 
-// --------- WebSocket ----------
+// WebSocket
 void handleWSMessage(const String& msg) {
   StaticJsonDocument<512> d;
   DeserializationError err = deserializeJson(d, msg);
@@ -197,7 +227,7 @@ void sendWS() {
   ws.sendTXT(out);
 }
 
-// --------- Serial parsing ----------
+// Serial parsing
 bool tryParseTwoFloats(const String& s, float& a, float& b) {
   float ta, tb;
   int matched = sscanf(s.c_str(), "%f %f", &ta, &tb);
@@ -221,7 +251,7 @@ bool tryParseGps(const String& s) {
   return false;
 }
 
-// ---- NEW: parse pos <lat>,<lng> <speed> <pressure> | pos <lat>,<lng>,<speed>,<pressure>
+// Parse lệnh pos: pos <lat>,<lng> <speed> <pressure>  hoặc pos <lat>,<lng>,<speed>,<pressure>
 bool tryParsePosAll(const String& s) {
   float la, lo, v, p;
   if (sscanf(s.c_str(), "pos %f,%f %f %f", &la, &lo, &v, &p) == 4) {
@@ -303,7 +333,7 @@ void readSerial() {
   }
 }
 
-// --------- setup / loop ----------
+// Setup / loop
 void setup() {
   Serial.begin(115200); delay(200);
   pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
