@@ -331,7 +331,7 @@ void setup() {
   // OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { Serial.println(F("[ERR] OLED not found!")); for(;;); }
   display.clearDisplay(); display.setTextSize(2); display.setTextColor(SSD1306_WHITE);
-  drawCenteredText(F("WS Ready"), 22, 2); display.display(); delay(600);
+  drawCenteredText(F("Hello"), 22, 2); display.display(); delay(600);
 
   // WiFi
   WiFi.mode(WIFI_STA);
