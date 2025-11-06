@@ -1,9 +1,13 @@
 /*******************************************************************************
- * main.ino — WS + OLED + Encoder speed (GPIO34)
- *  - Đo tốc độ qua encoder (xung/vòng) -> tính km/h
- *  - Hiển thị lên OLED
- *  - Gửi speedKmh tới WebSocket server
+ * main.ino — ESP32 + OLED + Encoder + BMP180 + GPS (keep last fix) + WebSocket
+ *  - Speed: Encoder (GPIO34) -> km/h
+ *  - Pressure: BMP180 (bar)
+ *  - GPS: GY-NEO6M (UART2). Khi mất fix: dùng "last fix" + tuổi fix (fixAgeMs)
+ *  - OLED hiển thị; gửi JSON tới WebSocket server để so sánh giới hạn tốc độ
+ *
+ * Te: đổi các thông số đánh dấu "<--" cho đúng phần cứng của bạn
  ******************************************************************************/
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -12,12 +16,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include <Adafruit_BMP085.h>   // BMP180 compatible
+#include <Adafruit_Sensor.h>
+#include <TinyGPSPlus.h>
+
 // ================== WiFi / WebSocket ==================
-const char* WIFI_SSID = "P4";
-const char* WIFI_PASS = "p45024ltm";
+const char* WIFI_SSID = "P4";          // <-- WiFi
+const char* WIFI_PASS = "p45024ltm";   // <-- WiFi
 
 // ws://<PC-IP>:3000/ws
-const char* WS_HOST = "192.168.1.8";  // <-- sửa IP PC
+const char* WS_HOST = "192.168.1.8";   // <-- IP PC chạy server
 const uint16_t WS_PORT = 3000;
 const char* WS_PATH = "/ws";
 
@@ -28,15 +36,14 @@ const char* WS_PATH = "/ws";
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ================== Encoder config (GPIO34) ==================
-// NHỚ: GPIO34 input-only, không pull-up nội => cần điện trở kéo lên ngoài!
-#define ENC_PIN               34      // kênh encoder đưa xung vào đây
-#define PULSES_PER_REV        20      // <== ĐỔI theo encoder (xung / vòng)
-#define SAMPLE_MS             500     // thời gian lấy mẫu tốc độ (ms)
-#define MIN_PULSE_US          200     // lọc nhiễu: bỏ xung < 200us
-#define WHEEL_CIRCUMFERENCE_M 0.21f   // <== ĐỔI: chu vi bánh/đĩa (m) để tính km/h
+// ================== Encoder (GPIO34) ==================
+// Ghi chú: GPIO34 input-only, không có pull-up nội -> cần kéo lên/kéo xuống ngoài nếu đầu ra encoder là dạng hở
+#define ENC_PIN               34
+#define PULSES_PER_REV        20        // <-- số xung/vòng theo encoder của bạn
+#define SAMPLE_MS             500       // khoảng lấy mẫu tốc độ
+#define MIN_PULSE_US          200       // lọc nhiễu biên
+#define WHEEL_CIRCUMFERENCE_M 0.21f     // <-- chu vi bánh/đĩa (m)
 
-// Biến đếm xung (ISR)
 volatile uint32_t encPulseCount = 0;
 volatile uint32_t encLastPulseUs = 0;
 void IRAM_ATTR onEncPulse() {
@@ -47,20 +54,34 @@ void IRAM_ATTR onEncPulse() {
   }
 }
 
+// ================== BMP180 (I2C) ==================
+Adafruit_BMP085 bmp;
+
+// ================== GPS (UART2) ==================
+#define GPS_RX 16   // ESP32 RX2  ← TX GPS
+#define GPS_TX 17   // ESP32 TX2  → RX GPS
+#define GPS_BAUD 9600
+HardwareSerial SerialGPS(2);
+TinyGPSPlus gps;
+
 // ================== Trạng thái & ngưỡng ==================
 WebSocketsClient ws;
 bool wsConnected = false;
 
-float speed_kmh    = 0.0f;    // sẽ được cập nhật từ encoder
-float pressure_bar = 1.50f;   // giữ logic cũ: chỉnh qua Serial nếu muốn
+float speed_kmh    = 0.0f;   // từ encoder
+float pressure_bar = 0.0f;   // từ BMP180
 
+// Ngưỡng áp suất (cục bộ cho OLED/LED)
 float PRESSURE_LIMIT_MIN = 1.00f;  // bar
 float PRESSURE_LIMIT_MAX = 2.00f;  // bar
 
-bool  hasCoord = false;
-float gps_lat = 0.0f;
-float gps_lng = 0.0f;
+// GPS: current + last-fix
+bool   gpsFix = false;          // có fix hiện tại?
+double curLat = 0.0, curLng = 0.0;
+double lastLat = 0.0, lastLng = 0.0;
+unsigned long lastFixMs = 0;    // thời điểm có fix lần gần nhất (millis)
 
+// Phản hồi server cho tốc độ
 bool  srv_overMax = false;
 bool  srv_underMin = false;
 int   srv_limit_kmh = -1;
@@ -73,8 +94,6 @@ uint32_t lastSendMs = 0;
 const uint32_t BLINK_INTERVAL_MS = 350;
 uint32_t lastBlinkMs = 0;
 bool blinkOn = false;
-
-String lineBuffer;
 
 // ================== Helpers hiển thị ==================
 void drawCenteredText(const String &text, int16_t y, uint8_t textSize = 1) {
@@ -94,22 +113,39 @@ void updateBlink() {
 }
 
 // ================== Màn hình ==================
-void showNormal() {
+void showNormal(bool showGpsLine = true) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   drawCenteredText(F("GIAM SAT"), 0, 1);
 
-  // tốc độ
+  // Tốc độ
   display.setTextSize(1);
-  display.setCursor(4, 20); display.print(F("Toc do: "));
+  display.setCursor(2, 14); display.print(F("Toc do: "));
   display.setTextSize(2);   display.print(speed_kmh, 2);
-  display.setTextSize(1);   display.setCursor(100, 28); display.print(F("km/h"));
+  display.setTextSize(1);   display.setCursor(100, 22); display.print(F("km/h"));
 
-  // áp suất
+  // Áp suất
   display.setTextSize(1);
-  display.setCursor(4, 42); display.print(F("Ap suat: "));
-  display.setTextSize(2);   display.print(pressure_bar, 1);
-  display.setTextSize(1);   display.setCursor(100, 50); display.print(F("bar"));
+  display.setCursor(2, 36); display.print(F("Ap suat: "));
+  display.setTextSize(2);   display.print(pressure_bar, 2);
+  display.setTextSize(1);   display.setCursor(100, 44); display.print(F("bar"));
+
+  // GPS dòng trạng thái
+  if (showGpsLine) {
+    display.setTextSize(1);
+    display.setCursor(2, 56);
+    if (gpsFix) {
+      display.print(F("GPS:"));
+      display.print(curLat, 4);
+      display.print(",");
+      display.print(curLng, 4);
+    } else {
+      unsigned long age = (millis() - lastFixMs) / 1000;
+      display.print(F("GPS:"));
+      display.print(age);
+      display.print(F("s)"));
+    }
+  }
 
   display.display();
 }
@@ -124,7 +160,7 @@ void showAlert() {
 
   if (blinkOn) {
     display.setTextColor(SSD1306_WHITE);
-    drawCenteredText(F("CANH BAO!"), 6, 2);
+    drawCenteredText(F("CANH BAO!"), 2, 2);
   }
 
   String lines[6]; 
@@ -200,127 +236,51 @@ void onWSEvent(WStype_t type, uint8_t * payload, size_t length) {
 }
 
 void sendWS() {
-  if (!wsConnected || !hasCoord) return;
   uint32_t now = millis();
-  if (now - lastSendMs < SEND_INTERVAL_MS) return;
+  if (!wsConnected || (now - lastSendMs < SEND_INTERVAL_MS)) return;
   lastSendMs = now;
 
+  // Dùng vị trí hiện tại nếu có fix; nếu không thì dùng last fix (nếu đã từng có)
+  double sendLat = gpsFix ? curLat : lastLat;
+  double sendLng = gpsFix ? curLng : lastLng;
+  unsigned long fixAgeMs = (lastFixMs == 0) ? (unsigned long)UINT32_MAX : (millis() - lastFixMs);
+
   StaticJsonDocument<256> doc;
-  doc["lat"] = gps_lat;
-  doc["lng"] = gps_lng;
-  doc["speedKmh"] = speed_kmh;   // <-- tốc độ từ encoder
+  doc["lat"] = sendLat;
+  doc["lng"] = sendLng;
+  doc["gpsFix"] = gpsFix;
+  doc["fixAgeMs"] = fixAgeMs;
+  doc["speedKmh"] = speed_kmh;       // tốc độ từ encoder
+  doc["pressureBar"] = pressure_bar; // áp suất từ BMP180
   doc["margin"] = 5;
 
   String out; serializeJson(doc, out);
   ws.sendTXT(out);
 }
 
-// ================== Serial parsing (giữ nguyên, chỉ không nhập speed thủ công nữa) ==================
-bool tryParseTwoFloats(const String& s, float& a, float& b) {
-  float ta, tb;
-  int matched = sscanf(s.c_str(), "%f %f", &ta, &tb);
-  if (matched == 2) { a = ta; b = tb; return true; }
-  matched = sscanf(s.c_str(), "v=%f p=%f", &ta, &tb);
-  if (matched == 2) { a = ta; b = tb; return true; }
-  matched = sscanf(s.c_str(), "%f,%f", &ta, &tb);
-  if (matched == 2) { a = ta; b = tb; return true; }
-  return false;
+// ================== Đọc cảm biến ==================
+void pollGPS() {
+  while (SerialGPS.available()) gps.encode(SerialGPS.read());
+
+  bool validLoc = gps.location.isValid();
+  if (gps.location.isUpdated() && validLoc) {
+    curLat = gps.location.lat();
+    curLng = gps.location.lng();
+    gpsFix = true;
+    lastLat = curLat;
+    lastLng = curLng;
+    lastFixMs = millis();
+  } else if (!validLoc) {
+    gpsFix = false;
+  }
 }
 
-bool tryParseGps(const String& s) {
-  float la, lo;
-  if (sscanf(s.c_str(), "gps %f,%f", &la, &lo) == 2 ||
-      sscanf(s.c_str(), "gps=%f,%f", &la, &lo) == 2 ||
-      sscanf(s.c_str(), "gps %f %f", &la, &lo) == 2) {
-    gps_lat = la; gps_lng = lo; hasCoord = true;
-    Serial.printf("[GPS] lat=%.6f lng=%.6f\n", gps_lat, gps_lng);
-    return true;
-  }
-  return false;
-}
-
-bool tryParsePosAll(const String& s) {
-  // Cho phép nhập ngay cả speed & pressure để test nhanh;
-  // speed_kmh sẽ bị encoder ghi đè mỗi chu kỳ SAMPLE_MS.
-  float la, lo, v, p;
-  if (sscanf(s.c_str(), "pos %f,%f %f %f", &la, &lo, &v, &p) == 4) {
-    gps_lat = la; gps_lng = lo; hasCoord = true; pressure_bar = p;
-    Serial.printf("[OK] POS+DATA lat=%.6f lng=%.6f v(ignored)=%.2f p=%.3f\n", gps_lat, gps_lng, v, pressure_bar);
-    return true;
-  }
-  if (sscanf(s.c_str(), "pos %f,%f,%f,%f", &la, &lo, &v, &p) == 4) {
-    gps_lat = la; gps_lng = lo; hasCoord = true; pressure_bar = p;
-    Serial.printf("[OK] POS+DATA lat=%.6f lng=%.6f v(ignored)=%.2f p=%.3f\n", gps_lat, gps_lng, v, pressure_bar);
-    return true;
-  }
-  return false;
-}
-
-bool tryParsePressureLimits(const String& s) {
-  float v;
-  if (sscanf(s.c_str(), "limit pmin=%f", &v) == 1) {
-    PRESSURE_LIMIT_MIN = v;
-    Serial.printf("[OK] PRESSURE_LIMIT_MIN=%.2f bar\n", PRESSURE_LIMIT_MIN);
-    return true;
-  }
-  if (sscanf(s.c_str(), "limit pmax=%f", &v) == 1) {
-    PRESSURE_LIMIT_MAX = v;
-    Serial.printf("[OK] PRESSURE_LIMIT_MAX=%.2f bar\n", PRESSURE_LIMIT_MAX);
-    return true;
-  }
-  return false;
-}
-
-void sendOneNow() {
-  if (!wsConnected || !hasCoord) return;
-  StaticJsonDocument<256> doc;
-  doc["lat"] = gps_lat;
-  doc["lng"] = gps_lng;
-  doc["speedKmh"] = speed_kmh;  // <-- dùng tốc độ đo được
-  doc["margin"] = 5;
-  String out; serializeJson(doc, out);
-  ws.sendTXT(out);
-}
-
-void readSerial() {
-  while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\r') continue;
-    if (c == '\n') {
-      String cmd = lineBuffer; lineBuffer = ""; cmd.trim();
-      if (!cmd.length()) return;
-
-      if (cmd.startsWith("pos")) {
-        if (!tryParsePosAll(cmd)) {
-          Serial.println(F("[ERR] pos <lat>,<lng> <speed> <pressure> | pos <lat>,<lng>,<speed>,<pressure>"));
-        } else {
-          sendOneNow();  // gửi ngay 1 gói với speedKmh hiện tại
-        }
-        return;
-      }
-
-      if (cmd.startsWith("gps")) {
-        if (!tryParseGps(cmd)) Serial.println(F("[ERR] gps <lat>,<lng> | gps=<lat>,<lng> | gps <lat> <lng>"));
-        return;
-      }
-      if (cmd.startsWith("limit")) {
-        if (!tryParsePressureLimits(cmd)) Serial.println(F("[ERR] limit pmin=<bar> | limit pmax=<bar>"));
-        return;
-      }
-
-      // Cho phép nhập "72.5 1.23" chỉ để test pressure; speed sẽ bị encoder ghi đè
-      float a, b;
-      if (tryParseTwoFloats(cmd, a, b)) {
-        // a = speed giả lập (bị bỏ qua), b = pressure
-        pressure_bar = b;
-        Serial.printf("[OK] (speed ignored) p=%.3f bar\n", pressure_bar);
-      } else {
-        Serial.println(F("[ERR] '72.5 1.23' | 'v=72.5 p=1.23' | '72.5,1.23' ; GPS: 'gps 21.0,105.8' ; POS: 'pos lat,lng v p'"));
-      }
-    } else {
-      if (lineBuffer.length() < 120) lineBuffer += c;
-    }
-  }
+bool readPressureBMP180(float &barOut) {
+  // readPressure() trả Pa; trả 0 nếu lỗi
+  int32_t Pa = bmp.readPressure();
+  if (Pa <= 0) return false;
+  barOut = Pa / 100000.0f; // Pa -> bar
+  return true;
 }
 
 // ================== Setup / loop ==================
@@ -328,10 +288,27 @@ void setup() {
   Serial.begin(115200); delay(200);
   pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
 
+  // I2C (OLED + BMP180)
+  Wire.begin(21, 22);  // SDA=21, SCL=22
+
   // OLED
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { Serial.println(F("[ERR] OLED not found!")); for(;;); }
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("[ERR] OLED not found (0x3C)!"));
+    for(;;);
+  }
   display.clearDisplay(); display.setTextSize(2); display.setTextColor(SSD1306_WHITE);
-  drawCenteredText(F("Hello"), 22, 2); display.display(); delay(600);
+  drawCenteredText(F("Starting"), 22, 2); display.display(); delay(600);
+
+  // BMP180
+  if (!bmp.begin()) {
+    Serial.println(F("[ERR] BMP180 not found (0x77)!"));
+  } else {
+    Serial.println(F("[BMP180] OK"));
+  }
+
+  // GPS UART2
+  SerialGPS.begin(GPS_BAUD, SERIAL_8N1, GPS_RX, GPS_TX);
+  Serial.println(F("[GPS] UART2 started"));
 
   // WiFi
   WiFi.mode(WIFI_STA);
@@ -349,20 +326,25 @@ void setup() {
   ws.setReconnectInterval(2000);
   ws.enableHeartbeat(15000, 3000, 2);
 
-  // Encoder GPIO34
-  pinMode(ENC_PIN, INPUT);                // NHỚ kéo lên ngoài (10k -> 3.3V) nếu cần
+  // Encoder
+  pinMode(ENC_PIN, INPUT); // cần phần cứng kéo lên/kéo xuống phù hợp
   attachInterrupt(digitalPinToInterrupt(ENC_PIN), onEncPulse, RISING);
-
-  Serial.println("===== INPUT =====");
-  Serial.println("- pos 21.0546,105.8684 72.5 1.23   (cap nhat toa do + pressure, speed do encoder)");
-  Serial.println("- gps 21.0546,105.8684              (cap nhat toa do)");
-  Serial.println("- 72.5 1.23                         (speed ignored, pressure bar)");
-  Serial.println("- limit pmin=1.0 | limit pmax=2.0   (nguong ap suat)");
-  Serial.println("=================");
 }
 
 void loop() {
-  // ----- Cập nhật tốc độ từ encoder mỗi SAMPLE_MS -----
+  // 1) Nhấp nháy + WS
+  updateBlink();
+  ws.loop();
+
+  // 2) Cập nhật GPS + BMP180
+  pollGPS();
+
+  float pbar;
+  if (readPressureBMP180(pbar)) {
+    pressure_bar = pbar;
+  }
+
+  // 3) Tính tốc độ từ encoder mỗi SAMPLE_MS
   static uint32_t lastCalcMs = 0;
   uint32_t nowMs = millis();
   if (nowMs - lastCalcMs >= SAMPLE_MS) {
@@ -373,31 +355,24 @@ void loop() {
     encPulseCount = 0;
     interrupts();
 
-    // Vòng/chu kỳ = pulses / PULSES_PER_REV
-    float revolutions = (float)pulses / (float)PULSES_PER_REV; // vòng trong SAMPLE_MS
-    // RPS = vòng/giây
-    float rps = revolutions * (1000.0f / (float)SAMPLE_MS);
-    // V (m/s) = RPS * chu vi (m)
-    float v_mps = rps * WHEEL_CIRCUMFERENCE_M;
-    // km/h
-    speed_kmh = v_mps * 3.6f;
+    float revolutions = (float)pulses / (float)PULSES_PER_REV;    // vòng trong SAMPLE_MS
+    float rps = revolutions * (1000.0f / (float)SAMPLE_MS);       // vòng/giây
+    float v_mps = rps * WHEEL_CIRCUMFERENCE_M;                    // m/s
+    speed_kmh = v_mps * 3.6f;                                     // km/h
 
-    // Chống nhiễu: nếu pulses rất nhỏ có thể làm số dao động, tuỳ chọn lọc thêm
-    // if (pulses == 0) speed_kmh = 0;
-    Serial.printf("[ENC] pulses=%lu -> %.2f km/h\n", (unsigned long)pulses, speed_kmh);
+    Serial.printf("[ENC] pulses=%lu -> %.2f km/h | P=%.3f bar | GPS:%s (age %lus)\n",
+      (unsigned long)pulses, speed_kmh, pressure_bar, gpsFix ? "FIX" : "NO", (lastFixMs==0)?999999:((millis()-lastFixMs)/1000));
   }
 
-  // ----- Phần còn lại giữ nguyên -----
-  readSerial();
-  updateBlink();
-  ws.loop();
+  // 4) Gửi WS
   sendWS();
 
+  // 5) Hiển thị + LED
+  bool pressHigh = (pressure_bar > PRESSURE_LIMIT_MAX);
+  bool pressLow  = (pressure_bar < PRESSURE_LIMIT_MIN);
+  bool anyAlert  = srv_overMax || srv_underMin || pressHigh || pressLow;
   updateLED();
-  if (srv_overMax || srv_underMin || (pressure_bar > PRESSURE_LIMIT_MAX) || (pressure_bar < PRESSURE_LIMIT_MIN))
-    showAlert();
-  else
-    showNormal();
+  if (anyAlert) showAlert(); else showNormal(true);
 
   delay(10);
 }
