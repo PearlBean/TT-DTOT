@@ -1,12 +1,4 @@
-/*******************************************************************************
- * main.ino — ESP32 + OLED + Encoder + BMP180 + GPS (keep last fix) + WebSocket
- *  - Speed: Encoder (GPIO34) -> km/h
- *  - Pressure: BMP180 (bar)
- *  - GPS: GY-NEO6M (UART2). Khi mất fix: dùng "last fix" + tuổi fix (fixAgeMs)
- *  - OLED hiển thị; gửi JSON tới WebSocket server để so sánh giới hạn tốc độ
- *
- * Te: đổi các thông số đánh dấu "<--" cho đúng phần cứng của bạn
- ******************************************************************************/
+// demo thực tế
 
 #include <Arduino.h>
 #include <Wire.h>
