@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="vi">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ thống giám sát phương tiện thông minh</title>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f4f8;
+            height: 100%;
+        }
+        
+        html {
+            height: 100%;
+        }
+        
+        .sidebar {
+            background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-item {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+        
+        .nav-item.active {
+            background: rgba(255,255,255,0.15);
+            border-left: 4px solid #60a5fa;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-normal {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .status-warning {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+        
+        .status-danger {
+            background: #fecaca;
+            color: #991b1b;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .5;
+            }
+        }
+        
+        .vehicle-row {
+            transition: background 0.2s ease;
+        }
+        
+        .vehicle-row:hover {
+            background: #f9fafb;
+        }
+        
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn-secondary {
+            background: #64748b;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        
+        .btn-secondary:hover {
+            background: #475569;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90%;
+            overflow-y: auto;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        
+        .gauge {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(#2563eb 0deg, #e5e7eb 0deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .gauge-inner {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        
+        .login-container {
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .login-box {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        .alert-item {
+            background: white;
+            border-left: 4px solid #ef4444;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body><!-- Login Page -->
+  <div id="loginPage" class="login-container">
+   <div class="login-box">
+    <div class="text-center mb-8">
+     <div class="text-5xl mb-4">
+      🚗
+     </div>
+     <h1 id="systemTitle" class="text-3xl font-bold text-gray-800 mb-2">Giám sát xe của tôi</h1>
+     <p class="text-gray-600">Theo dõi tốc độ và áp suất lốp xe</p>
+    </div>
+    <form id="loginForm" class="space-y-4">
+     <div><label for="loginEmail" class="block text-sm font-semibold text-gray-700 mb-2">Email</label> <input type="email" id="loginEmail" class="form-input" placeholder="example@email.com" required>
+     </div>
+     <div><label for="loginPassword" class="block text-sm font-semibold text-gray-700 mb-2">Mật khẩu</label> <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required>
+     </div><button type="submit" class="btn-primary w-full">Đăng nhập</button>
+     <div class="text-center space-y-2 mt-4"><a href="#" class="text-sm text-blue-600 hover:underline block">Quên mật khẩu?</a> <a href="#" class="text-sm text-blue-600 hover:underline block">Đăng ký tài khoản mới</a>
+     </div>
+    </form>
+   </div>
+  </div><!-- Main Dashboard -->
+  <div id="mainApp" style="display: none; height: 100%;">
+   <div class="flex" style="height: 100%;"><!-- Sidebar -->
+    <div class="sidebar w-64 text-white flex-shrink-0">
+     <div class="p-6">
+      <div class="text-2xl font-bold mb-2">
+       🚗 Xe của tôi
+      </div>
+      <p class="text-sm text-blue-200">Theo dõi thời gian thực</p>
+     </div>
+     <nav class="mt-6">
+      <div class="nav-item active px-6 py-3 flex items-center space-x-3" data-page="dashboard"><span class="text-xl">📊</span> <span class="font-semibold">Tổng quan</span>
+      </div>
+      <div class="nav-item px-6 py-3 flex items-center space-x-3" data-page="vehicles"><span class="text-xl">🚗</span> <span class="font-semibold">Xe của tôi</span>
+      </div>
+      <div class="nav-item px-6 py-3 flex items-center space-x-3" data-page="history"><span class="text-xl">📈</span> <span class="font-semibold">Lịch sử</span>
+      </div>
+      <div class="nav-item px-6 py-3 flex items-center space-x-3" data-page="alerts"><span class="text-xl">⚠️</span> <span class="font-semibold">Cảnh báo</span>
+      </div>
+      <div class="nav-item px-6 py-3 flex items-center space-x-3" data-page="settings"><span class="text-xl">⚙️</span> <span class="font-semibold">Cài đặt</span>
+      </div>
+     </nav>
+     <div class="absolute bottom-0 w-64 p-6 border-t border-blue-700">
+      <div class="flex items-center space-x-3">
+       <div class="w-10 h-10 bg-blue-300 rounded-full flex items-center justify-center text-blue-900 font-bold">
+        N
+       </div>
+       <div>
+        <div class="font-semibold">
+         Nguyễn Văn A
+        </div><button id="logoutBtn" class="text-xs text-blue-200 hover:underline">Đăng xuất</button>
+       </div>
+      </div>
+     </div>
+    </div><!-- Main Content -->
+    <div class="flex-1 overflow-y-auto"><!-- Dashboard Page -->
+     <div id="dashboardPage" class="page-content p-8">
+      <div class="mb-6">
+       <h1 id="dashboardTitle" class="text-3xl font-bold text-gray-800 mb-2">Tổng quan xe của tôi</h1>
+       <p id="welcomeMessage" class="text-gray-600">Theo dõi tốc độ và áp suất lốp theo thời gian thực</p>
+       <div class="flex items-center mt-2"><span class="w-3 h-3 bg-green-500 rounded-full pulse mr-2"></span> <span class="text-sm text-gray-600">Đang kết nối với xe</span>
+       </div>
+      </div><!-- Stats Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+       <div class="stat-card">
+        <div class="flex items-center justify-between mb-2"><span class="text-gray-600 text-sm font-semibold">Số xe</span> <span class="text-2xl">🚗</span>
+        </div>
+        <div class="text-3xl font-bold text-gray-800" id="activeVehicles">
+         0
+        </div>
+        <div class="text-xs text-green-600 mt-1">
+         Xe đang theo dõi
+        </div>
+       </div>
+       <div class="stat-card">
+        <div class="flex items-center justify-between mb-2"><span class="text-gray-600 text-sm font-semibold">Cảnh báo</span> <span class="text-2xl">⚠️</span>
+        </div>
+        <div class="text-3xl font-bold text-orange-600" id="alertCount">
+         0
+        </div>
+        <div class="text-xs text-orange-600 mt-1" id="alertStatus">
+         Không có cảnh báo
+        </div>
+       </div>
+       <div class="stat-card">
+        <div class="flex items-center justify-between mb-2"><span class="text-gray-600 text-sm font-semibold">Tốc độ hiện tại</span> <span class="text-2xl">⚡</span>
+        </div>
+        <div class="text-3xl font-bold text-blue-600" id="avgSpeed">
+         0
+        </div>
+        <div class="text-xs text-gray-500 mt-1">
+         km/h
+        </div>
+       </div>
+       <div class="stat-card">
+        <div class="flex items-center justify-between mb-2"><span class="text-gray-600 text-sm font-semibold">Áp suất lốp</span> <span class="text-2xl">🔧</span>
+        </div>
+        <div class="text-3xl font-bold text-purple-600" id="avgPressure">
+         0
+        </div>
+        <div class="text-xs text-gray-500 mt-1">
+         PSI
+        </div>
+       </div>
+      </div><!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+       <div class="chart-container">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Biểu đồ tốc độ theo thời gian</h3>
+        <div id="speedChart" class="h-64 flex items-center justify-center text-gray-400">
+         Dữ liệu sẽ hiển thị khi có xe hoạt động
+        </div>
+       </div>
+       <div class="chart-container">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Biểu đồ áp suất lốp</h3>
+        <div id="pressureChart" class="h-64 flex items-center justify-center text-gray-400">
+         Dữ liệu sẽ hiển thị khi có xe hoạt động
+        </div>
+       </div>
+      </div><!-- Vehicle Table -->
+      <div class="chart-container">
+       <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-gray-800">Xe của tôi</h3><button id="addVehicleBtn" class="btn-primary">+ Thêm xe</button>
+       </div>
+       <div class="overflow-x-auto">
+        <table class="w-full">
+         <thead>
+          <tr class="border-b-2 border-gray-200">
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Tên xe</th>
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Tốc độ</th>
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Áp suất</th>
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Trạng thái</th>
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Cảnh báo</th>
+           <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Thao tác</th>
+          </tr>
+         </thead>
+         <tbody id="vehicleTableBody">
+          <tr>
+           <td colspan="6" class="text-center py-8 text-gray-400">Chưa có xe nào. Nhấn "Thêm xe" để bắt đầu theo dõi.</td>
+          </tr>
+         </tbody>
+        </table>
+       </div>
+      </div>
+     </div><!-- Vehicles Page -->
+     <div id="vehiclesPage" class="page-content p-8" style="display: none;">
+      <div class="mb-6">
+       <h1 class="text-3xl font-bold text-gray-800 mb-2">Xe của tôi</h1>
+       <p class="text-gray-600">Quản lý và theo dõi các xe của bạn</p>
+      </div>
+      <div class="chart-container">
+       <div class="flex justify-between items-center mb-4">
+        <div class="flex space-x-4"><input type="text" id="searchVehicle" class="form-input" placeholder="🔍 Tìm kiếm xe...">
+        </div><button id="addVehicleBtn2" class="btn-primary">+ Thêm xe</button>
+       </div>
+       <div id="vehicleGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="text-center py-12 text-gray-400 col-span-full">
+         Chưa có xe nào. Thêm xe để bắt đầu giám sát.
+        </div>
+       </div>
+      </div>
+     </div><!-- History Page -->
+     <div id="historyPage" class="page-content p-8" style="display: none;">
+      <div class="mb-6">
+       <h1 class="text-3xl font-bold text-gray-800 mb-2">Lịch sử</h1>
+       <p class="text-gray-600">Xem lại dữ liệu tốc độ và áp suất theo thời gian</p>
+      </div>
+      <div class="chart-container mb-6">
+       <h3 class="text-lg font-bold text-gray-800 mb-4">Bộ lọc</h3>
+       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div><label class="block text-sm font-semibold text-gray-700 mb-2">Chọn xe</label> <select id="historyVehicleFilter" class="form-input"> <option value="">Tất cả xe</option> </select>
+        </div>
+        <div><label class="block text-sm font-semibold text-gray-700 mb-2">Từ ngày</label> <input type="date" id="historyDateFrom" class="form-input">
+        </div>
+        <div><label class="block text-sm font-semibold text-gray-700 mb-2">Đến ngày</label> <input type="date" id="historyDateTo" class="form-input">
+        </div>
+       </div><button id="applyHistoryFilter" class="btn-primary mt-4">Áp dụng bộ lọc</button> <button id="exportCSV" class="btn-secondary mt-4 ml-2">📥 Tải CSV</button>
+      </div>
+      <div class="chart-container">
+       <h3 class="text-lg font-bold text-gray-800 mb-4">Biểu đồ lịch sử</h3>
+       <div id="historyChart" class="h-96 flex items-center justify-center text-gray-400">
+        Chọn bộ lọc và nhấn "Áp dụng" để xem dữ liệu
+       </div>
+      </div>
+     </div><!-- Alerts Page -->
+     <div id="alertsPage" class="page-content p-8" style="display: none;">
+      <div class="mb-6">
+       <h1 class="text-3xl font-bold text-gray-800 mb-2">Cảnh báo</h1>
+       <p class="text-gray-600">Các cảnh báo về tốc độ và áp suất lốp</p>
+      </div>
+      <div class="chart-container mb-6">
+       <div class="flex space-x-4"><button class="px-4 py-2 rounded-lg bg-blue-100 text-blue-700 font-semibold" id="filterAll">Tất cả</button> <button class="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" id="filterActive">Đang hoạt động</button> <button class="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" id="filterResolved">Đã xử lý</button>
+       </div>
+      </div>
+      <div id="alertsList" class="space-y-4">
+       <div class="text-center py-12 text-gray-400">
+        Không có cảnh báo nào
+       </div>
+      </div>
+     </div><!-- Settings Page -->
+     <div id="settingsPage" class="page-content p-8" style="display: none;">
+      <div class="mb-6">
+       <h1 class="text-3xl font-bold text-gray-800 mb-2">Cài đặt</h1>
+       <p class="text-gray-600">Cấu hình ngưỡng cảnh báo cho xe của bạn</p>
+      </div>
+      <div class="chart-container mb-6">
+       <h3 class="text-lg font-bold text-gray-800 mb-4">Ngưỡng cảnh báo</h3>
+       <div class="space-y-4">
+        <div><label class="block text-sm font-semibold text-gray-700 mb-2">Chọn xe</label> <select id="settingsVehicleSelect" class="form-input"> <option value="">Chọn xe để cấu hình</option> </select>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <div><label class="block text-sm font-semibold text-gray-700 mb-2">Ngưỡng tốc độ tối đa (km/h)</label> <input type="number" id="maxSpeedThreshold" class="form-input" placeholder="120" value="120">
+         </div>
+         <div><label class="block text-sm font-semibold text-gray-700 mb-2">Ngưỡng áp suất tối thiểu (PSI)</label> <input type="number" id="minPressureThreshold" class="form-input" placeholder="30" value="30">
+         </div>
+        </div><button id="saveThresholds" class="btn-primary">💾 Lưu cài đặt</button>
+       </div>
+      </div>
+      <div class="chart-container">
+       <h3 class="text-lg font-bold text-gray-800 mb-4">Thông báo</h3>
+       <div class="space-y-4">
+        <div class="flex items-center"><input type="checkbox" id="emailNotif" class="w-4 h-4 text-blue-600" checked> <label for="emailNotif" class="ml-2 text-gray-700">Nhận thông báo qua Email</label>
+        </div>
+        <div class="flex items-center"><input type="checkbox" id="webNotif" class="w-4 h-4 text-blue-600" checked> <label for="webNotif" class="ml-2 text-gray-700">Nhận thông báo trên Web</label>
+        </div><button id="saveNotifSettings" class="btn-primary">💾 Lưu cài đặt thông báo</button>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div><!-- Add Vehicle Modal -->
+  <div id="addVehicleModal" class="modal">
+   <div class="modal-content">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4">Thêm xe của tôi</h2>
+    <form id="addVehicleForm" class="space-y-4">
+     <div><label for="vehicleName" class="block text-sm font-semibold text-gray-700 mb-2">Tên xe</label> <input type="text" id="vehicleName" class="form-input" placeholder="Ví dụ: Xe tải 01" required>
+     </div>
+     <div><label for="vehicleSpeed" class="block text-sm font-semibold text-gray-700 mb-2">Tốc độ hiện tại (km/h)</label> <input type="number" id="vehicleSpeed" class="form-input" placeholder="60" required>
+     </div>
+     <div><label for="vehiclePressure" class="block text-sm font-semibold text-gray-700 mb-2">Áp suất lốp (PSI)</label> <input type="number" id="vehiclePressure" class="form-input" placeholder="32" required>
+     </div>
+     <div class="flex space-x-3 mt-6"><button type="submit" class="btn-primary flex-1"> <span id="addVehicleText">Thêm xe</span> </button> <button type="button" id="cancelAddVehicle" class="btn-secondary flex-1">Hủy</button>
+     </div>
+    </form>
+   </div>
+  </div>
+  <script>
+        const defaultConfig = {
+            system_title: "Hệ thống giám sát phương tiện thông minh",
+            dashboard_title: "Tổng quan hệ thống",
+            welcome_message: "Chào mừng đến với hệ thống giám sát",
+            primary_color: "#2563eb",
+            secondary_color: "#1e3a8a",
+            text_color: "#1f2937",
+            background_color: "#f0f4f8",
+            accent_color: "#ef4444"
+        };
+
+        let currentPage = 'dashboard';
+        let isLoggedIn = false;
+        let vehicleData = [];
+
+        const dataHandler = {
+            onDataChanged(data) {
+                vehicleData = data;
+                updateDashboard();
+                updateVehicleTable();
+                updateVehicleGrid();
+                updateAlertsList();
+                updateHistoryFilters();
+                updateSettingsFilters();
+            }
+        };
+
+        async function initApp() {
+            if (window.dataSdk) {
+                const initResult = await window.dataSdk.init(dataHandler);
+                if (!initResult.isOk) {
+                    console.error("Failed to initialize data SDK");
+                }
+            }
+
+            if (window.elementSdk) {
+                window.elementSdk.init({
+                    defaultConfig,
+                    onConfigChange: async (config) => {
+                        const systemTitle = document.getElementById('systemTitle');
+                        const dashboardTitle = document.getElementById('dashboardTitle');
+                        const welcomeMessage = document.getElementById('welcomeMessage');
+                        
+                        if (systemTitle) systemTitle.textContent = config.system_title || defaultConfig.system_title;
+                        if (dashboardTitle) dashboardTitle.textContent = config.dashboard_title || defaultConfig.dashboard_title;
+                        if (welcomeMessage) welcomeMessage.textContent = config.welcome_message || defaultConfig.welcome_message;
+                        
+                        document.documentElement.style.setProperty('--primary-color', config.primary_color || defaultConfig.primary_color);
+                        document.documentElement.style.setProperty('--secondary-color', config.secondary_color || defaultConfig.secondary_color);
+                    },
+                    mapToCapabilities: (config) => ({
+                        recolorables: [
+                            {
+                                get: () => config.background_color || defaultConfig.background_color,
+                                set: (value) => {
+                                    if (window.elementSdk) {
+                                        window.elementSdk.config.background_color = value;
+                                        window.elementSdk.setConfig({ background_color: value });
+                                    }
+                                }
+                            },
+                            {
+                                get: () => config.secondary_color || defaultConfig.secondary_color,
+                                set: (value) => {
+                                    if (window.elementSdk) {
+                                        window.elementSdk.config.secondary_color = value;
+                                        window.elementSdk.setConfig({ secondary_color: value });
+                                    }
+                                }
+                            },
+                            {
+                                get: () => config.text_color || defaultConfig.text_color,
+                                set: (value) => {
+                                    if (window.elementSdk) {
+                                        window.elementSdk.config.text_color = value;
+                                        window.elementSdk.setConfig({ text_color: value });
+                                    }
+                                }
+                            },
+                            {
+                                get: () => config.primary_color || defaultConfig.primary_color,
+                                set: (value) => {
+                                    if (window.elementSdk) {
+                                        window.elementSdk.config.primary_color = value;
+                                        window.elementSdk.setConfig({ primary_color: value });
+                                    }
+                                }
+                            },
+                            {
+                                get: () => config.accent_color || defaultConfig.accent_color,
+                                set: (value) => {
+                                    if (window.elementSdk) {
+                                        window.elementSdk.config.accent_color = value;
+                                        window.elementSdk.setConfig({ accent_color: value });
+                                    }
+                                }
+                            }
+                        ],
+                        borderables: [],
+                        fontEditable: undefined,
+                        fontSizeable: undefined
+                    }),
+                    mapToEditPanelValues: (config) => new Map([
+                        ["system_title", config.system_title || defaultConfig.system_title],
+                        ["dashboard_title", config.dashboard_title || defaultConfig.dashboard_title],
+                        ["welcome_message", config.welcome_message || defaultConfig.welcome_message]
+                    ])
+                });
+            }
+
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) {
+                loginForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    login();
+                });
+            }
+
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', logout);
+            }
+
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const page = item.dataset.page;
+                    navigateToPage(page);
+                });
+            });
+
+            const addVehicleBtn = document.getElementById('addVehicleBtn');
+            const addVehicleBtn2 = document.getElementById('addVehicleBtn2');
+            if (addVehicleBtn) addVehicleBtn.addEventListener('click', openAddVehicleModal);
+            if (addVehicleBtn2) addVehicleBtn2.addEventListener('click', openAddVehicleModal);
+
+            const cancelAddVehicle = document.getElementById('cancelAddVehicle');
+            if (cancelAddVehicle) {
+                cancelAddVehicle.addEventListener('click', closeAddVehicleModal);
+            }
+
+            const addVehicleForm = document.getElementById('addVehicleForm');
+            if (addVehicleForm) {
+                addVehicleForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await addVehicle();
+                });
+            }
+
+            const saveThresholds = document.getElementById('saveThresholds');
+            if (saveThresholds) {
+                saveThresholds.addEventListener('click', saveThresholdSettings);
+            }
+
+            const saveNotifSettings = document.getElementById('saveNotifSettings');
+            if (saveNotifSettings) {
+                saveNotifSettings.addEventListener('click', saveNotificationSettings);
+            }
+
+            const exportCSV = document.getElementById('exportCSV');
+            if (exportCSV) {
+                exportCSV.addEventListener('click', exportToCSV);
+            }
+        }
+
+        function login() {
+            isLoggedIn = true;
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+        }
+
+        function logout() {
+            isLoggedIn = false;
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+        }
+
+        function navigateToPage(page) {
+            document.querySelectorAll('.page-content').forEach(p => p.style.display = 'none');
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            
+            const pageElement = document.getElementById(page + 'Page');
+            if (pageElement) pageElement.style.display = 'block';
+            
+            const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+            if (navItem) navItem.classList.add('active');
+            
+            currentPage = page;
+        }
+
+        function openAddVehicleModal() {
+            document.getElementById('addVehicleModal').classList.add('active');
+        }
+
+        function closeAddVehicleModal() {
+            document.getElementById('addVehicleModal').classList.remove('active');
+            document.getElementById('addVehicleForm').reset();
+        }
+
+        async function addVehicle() {
+            if (vehicleData.length >= 999) {
+                showToast('Đã đạt giới hạn 999 xe. Vui lòng xóa bớt xe trước khi thêm mới.', 'error');
+                return;
+            }
+
+            const name = document.getElementById('vehicleName').value;
+            const speed = parseFloat(document.getElementById('vehicleSpeed').value);
+            const pressure = parseFloat(document.getElementById('vehiclePressure').value);
+
+            const submitBtn = document.querySelector('#addVehicleForm button[type="submit"]');
+            const btnText = document.getElementById('addVehicleText');
+            const originalText = btnText.textContent;
+            
+            submitBtn.disabled = true;
+            btnText.innerHTML = 'Đang thêm... <span class="loading-spinner"></span>';
+
+            const alertLevel = getAlertLevel(speed, pressure);
+            const status = alertLevel === 'normal' ? 'active' : 'warning';
+
+            const newVehicle = {
+                id: 'vehicle_' + Date.now(),
+                vehicle_name: name,
+                speed: speed,
+                pressure: pressure,
+                status: status,
+                alert_level: alertLevel,
+                timestamp: new Date().toISOString(),
+                latitude: 21.0285 + (Math.random() - 0.5) * 0.1,
+                longitude: 105.8542 + (Math.random() - 0.5) * 0.1
+            };
+
+            if (window.dataSdk) {
+                const result = await window.dataSdk.create(newVehicle);
+                
+                submitBtn.disabled = false;
+                btnText.textContent = originalText;
+                
+                if (result.isOk) {
+                    closeAddVehicleModal();
+                    showToast('Đã thêm xe thành công!', 'success');
+                } else {
+                    showToast('Lỗi khi thêm xe. Vui lòng thử lại.', 'error');
+                }
+            }
+        }
+
+        function getAlertLevel(speed, pressure) {
+            if (speed > 120 || pressure < 30) return 'danger';
+            if (speed > 100 || pressure < 32) return 'warning';
+            return 'normal';
+        }
+
+        function updateDashboard() {
+            const activeVehicles = vehicleData.length;
+            const alerts = vehicleData.filter(v => v.alert_level !== 'normal').length;
+            const avgSpeed = activeVehicles > 0 
+                ? Math.round(vehicleData.reduce((sum, v) => sum + v.speed, 0) / activeVehicles) 
+                : 0;
+            const avgPressure = activeVehicles > 0 
+                ? Math.round(vehicleData.reduce((sum, v) => sum + v.pressure, 0) / activeVehicles) 
+                : 0;
+
+            document.getElementById('activeVehicles').textContent = activeVehicles;
+            document.getElementById('alertCount').textContent = alerts;
+            document.getElementById('avgSpeed').textContent = avgSpeed;
+            document.getElementById('avgPressure').textContent = avgPressure;
+
+            const alertStatus = document.getElementById('alertStatus');
+            if (alerts === 0) {
+                alertStatus.textContent = 'Không có cảnh báo';
+                alertStatus.className = 'text-xs text-green-600 mt-1';
+            } else {
+                alertStatus.textContent = `${alerts} cảnh báo đang hoạt động`;
+                alertStatus.className = 'text-xs text-orange-600 mt-1';
+            }
+        }
+
+        function updateVehicleTable() {
+            const tbody = document.getElementById('vehicleTableBody');
+            
+            if (vehicleData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-8 text-gray-400">
+                            Chưa có xe nào. Nhấn "Thêm xe" để bắt đầu theo dõi.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = vehicleData.map(vehicle => `
+                <tr class="vehicle-row border-b border-gray-100">
+                    <td class="py-3 px-4">
+                        <div class="flex items-center">
+                            <span class="text-2xl mr-2">🚗</span>
+                            <span class="font-semibold">${vehicle.vehicle_name}</span>
+                        </div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="font-bold text-blue-600">${vehicle.speed}</span> km/h
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="font-bold text-purple-600">${vehicle.pressure}</span> PSI
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="status-badge ${vehicle.status === 'active' ? 'status-normal' : 'status-warning'}">
+                            ${vehicle.status === 'active' ? '✓ Hoạt động' : '⚠ Cảnh báo'}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="status-badge ${
+                            vehicle.alert_level === 'normal' ? 'status-normal' : 
+                            vehicle.alert_level === 'warning' ? 'status-warning' : 'status-danger'
+                        }">
+                            ${
+                                vehicle.alert_level === 'normal' ? '✓ Bình thường' : 
+                                vehicle.alert_level === 'warning' ? '⚠ Cảnh báo' : '🔴 Nguy hiểm'
+                            }
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <button onclick="deleteVehicle('${vehicle.__backendId}')" class="text-red-600 hover:text-red-800 font-semibold text-sm">
+                            🗑️ Xóa
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateVehicleGrid() {
+            const grid = document.getElementById('vehicleGrid');
+            
+            if (vehicleData.length === 0) {
+                grid.innerHTML = `
+                    <div class="text-center py-12 text-gray-400 col-span-full">
+                        Chưa có xe nào. Thêm xe để bắt đầu giám sát.
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = vehicleData.map(vehicle => `
+                <div class="stat-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <span class="text-3xl mr-3">🚗</span>
+                            <div>
+                                <h3 class="font-bold text-gray-800">${vehicle.vehicle_name}</h3>
+                                <span class="text-xs text-gray-500">${new Date(vehicle.timestamp).toLocaleString('vi-VN')}</span>
+                            </div>
+                        </div>
+                        <span class="status-badge ${
+                            vehicle.alert_level === 'normal' ? 'status-normal' : 
+                            vehicle.alert_level === 'warning' ? 'status-warning' : 'status-danger'
+                        }">
+                            ${
+                                vehicle.alert_level === 'normal' ? '✓' : 
+                                vehicle.alert_level === 'warning' ? '⚠' : '🔴'
+                            }
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-gray-600">Tốc độ</span>
+                            <span class="font-bold text-blue-600">${vehicle.speed} km/h</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-gray-600">Áp suất</span>
+                            <span class="font-bold text-purple-600">${vehicle.pressure} PSI</span>
+                        </div>
+                    </div>
+                    
+                    <button onclick="deleteVehicle('${vehicle.__backendId}')" class="w-full mt-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-sm transition">
+                        🗑️ Xóa xe
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateAlertsList() {
+            const alertsList = document.getElementById('alertsList');
+            const alerts = vehicleData.filter(v => v.alert_level !== 'normal');
+            
+            if (alerts.length === 0) {
+                alertsList.innerHTML = `
+                    <div class="text-center py-12 text-gray-400">
+                        Không có cảnh báo nào
+                    </div>
+                `;
+                return;
+            }
+
+            alertsList.innerHTML = alerts.map(alert => `
+                <div class="alert-item">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center">
+                            <span class="text-2xl mr-3">${alert.alert_level === 'danger' ? '🔴' : '⚠️'}</span>
+                            <div>
+                                <h4 class="font-bold text-gray-800">${alert.vehicle_name}</h4>
+                                <p class="text-sm text-gray-600">${new Date(alert.timestamp).toLocaleString('vi-VN')}</p>
+                            </div>
+                        </div>
+                        <span class="status-badge ${alert.alert_level === 'danger' ? 'status-danger' : 'status-warning'}">
+                            ${alert.alert_level === 'danger' ? 'Nguy hiểm' : 'Cảnh báo'}
+                        </span>
+                    </div>
+                    <div class="ml-11 space-y-1">
+                        ${alert.speed > 120 ? `<p class="text-sm text-red-600">⚡ Tốc độ vượt ngưỡng: ${alert.speed} km/h</p>` : ''}
+                        ${alert.pressure < 30 ? `<p class="text-sm text-red-600">🔧 Áp suất thấp: ${alert.pressure} PSI</p>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateHistoryFilters() {
+            const select = document.getElementById('historyVehicleFilter');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">Tất cả xe</option>' + 
+                vehicleData.map(v => `<option value="${v.id}">${v.vehicle_name}</option>`).join('');
+        }
+
+        function updateSettingsFilters() {
+            const select = document.getElementById('settingsVehicleSelect');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">Chọn xe để cấu hình</option>' + 
+                vehicleData.map(v => `<option value="${v.id}">${v.vehicle_name}</option>`).join('');
+        }
+
+        async function deleteVehicle(backendId) {
+            const vehicle = vehicleData.find(v => v.__backendId === backendId);
+            if (!vehicle) return;
+
+            const confirmDiv = document.createElement('div');
+            confirmDiv.className = 'modal active';
+            confirmDiv.innerHTML = `
+                <div class="modal-content">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Xác nhận xóa</h3>
+                    <p class="text-gray-600 mb-6">Bạn có chắc muốn xóa xe "${vehicle.vehicle_name}"?</p>
+                    <div class="flex space-x-3">
+                        <button id="confirmDelete" class="btn-primary flex-1">Xóa</button>
+                        <button id="cancelDelete" class="btn-secondary flex-1">Hủy</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(confirmDiv);
+
+            document.getElementById('confirmDelete').addEventListener('click', async () => {
+                if (window.dataSdk) {
+                    const result = await window.dataSdk.delete(vehicle);
+                    if (result.isOk) {
+                        showToast('Đã xóa xe thành công!', 'success');
+                    } else {
+                        showToast('Lỗi khi xóa xe. Vui lòng thử lại.', 'error');
+                    }
+                }
+                document.body.removeChild(confirmDiv);
+            });
+
+            document.getElementById('cancelDelete').addEventListener('click', () => {
+                document.body.removeChild(confirmDiv);
+            });
+        }
+
+        function saveThresholdSettings() {
+            showToast('Đã lưu cài đặt ngưỡng cảnh báo!', 'success');
+        }
+
+        function saveNotificationSettings() {
+            showToast('Đã lưu cài đặt thông báo!', 'success');
+        }
+
+        function exportToCSV() {
+            if (vehicleData.length === 0) {
+                showToast('Không có dữ liệu để xuất', 'error');
+                return;
+            }
+
+            const headers = ['Tên xe', 'Tốc độ (km/h)', 'Áp suất (PSI)', 'Trạng thái', 'Mức cảnh báo', 'Thời gian'];
+            const rows = vehicleData.map(v => [
+                v.vehicle_name,
+                v.speed,
+                v.pressure,
+                v.status,
+                v.alert_level,
+                new Date(v.timestamp).toLocaleString('vi-VN')
+            ]);
+
+            let csvContent = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csvContent += row.join(',') + '\n';
+            });
+
+            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `vehicle_data_${Date.now()}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showToast('Đã xuất dữ liệu CSV thành công!', 'success');
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50 ${
+                type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 3000);
+        }
+
+        window.deleteVehicle = deleteVehicle;
+
+        initApp();
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99d43c74339ea909',t:'MTc2MjkzMTcwNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

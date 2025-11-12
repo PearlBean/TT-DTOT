@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Realtime Speed & Pressure – MQTT</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind (UI nhanh gọn) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js + time adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <!-- MQTT.js (browser) -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-6xl mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Realtime Speed & Pressure (MQTT → Web)</h1>
+
+    <!-- Kết nối MQTT -->
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Broker URL (WebSocket)</label>
+          <input id="brokerUrl" class="border rounded px-3 py-2 w-full" placeholder="wss://<host>:<port>" />
+          <p class="text-xs text-slate-500 mt-1">
+            VD: wss://broker.example.com:8084 (wss). Nếu dùng ws:// hãy bật proxy/localhost cho dev.
+          </p>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Topic subscribe</label>
+          <input id="topic" class="border rounded px-3 py-2 w-full" placeholder="vehicles/+/telemetry" value="vehicles/+/telemetry" />
+          <p class="text-xs text-slate-500 mt-1">
+            Có thể lọc theo 1 xe: <code>vehicles/30F-123.45/telemetry</code>
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 mt-4">
+        <button id="btnConnect" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-4 py-2">Connect</button>
+        <button id="btnDisconnect" class="bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded px-4 py-2" disabled>Disconnect</button>
+        <button id="btnDemo" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded px-4 py-2">Demo (không cần MQTT)</button>
+        <span id="status" class="text-sm text-slate-600"></span>
+      </div>
+    </div>
+
+    <!-- Biển số đang xem + bộ lọc -->
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Lọc theo biển số (tùy chọn)</label>
+          <input id="plateFilter" class="border rounded px-3 py-2 w-60" placeholder="VD: 30F-123.45" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Giữ tối đa N điểm</label>
+          <input id="maxPoints" type="number" class="border rounded px-3 py-2 w-32" value="300" min="50" max="2000" />
+        </div>
+        <div class="text-sm text-slate-500">
+          <div>Payload kỳ vọng: <code>{"plate","speedKmh","pressurePsi","ts"}</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart tốc độ -->
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-bold">Tốc độ (km/h)</h2>
+        <span id="latestSpeed" class="text-sm text-slate-500"></span>
+      </div>
+      <canvas id="speedChart" height="120"></canvas>
+    </div>
+
+    <!-- Chart áp suất -->
+    <div class="bg-white rounded-xl shadow p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-bold">Áp suất (PSI)</h2>
+        <span id="latestPressure" class="text-sm text-slate-500"></span>
+      </div>
+      <canvas id="pressureChart" height="120"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // ============ Chart base ============
+    const mkDataset = (label) => ({
+      label,
+      data: [],                 // {x: timestamp(ms), y: number}
+      borderWidth: 2,
+      tension: 0.25,
+      pointRadius: 0
+    });
+
+    const speedChart = new Chart(document.getElementById("speedChart"), {
+      type: "line",
+      data: { datasets: [ mkDataset("Speed km/h") ] },
+      options: {
+        animation: false, parsing: false, responsive: true,
+        scales: {
+          x: { type: "time", time: { unit: "minute" } },
+          y: { title: { display: true, text: "km/h" }, suggestedMin: 0 }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    const pressureChart = new Chart(document.getElementById("pressureChart"), {
+      type: "line",
+      data: { datasets: [ mkDataset("Pressure PSI") ] },
+      options: {
+        animation: false, parsing: false, responsive: true,
+        scales: {
+          x: { type: "time", time: { unit: "minute" } },
+          y: { title: { display: true, text: "PSI" }, suggestedMin: 0 }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    const latestSpeedEl = document.getElementById("latestSpeed");
+    const latestPressureEl = document.getElementById("latestPressure");
+    const plateFilterEl = document.getElementById("plateFilter");
+    const maxPointsEl = document.getElementById("maxPoints");
+    const statusEl = document.getElementById("status");
+
+    function setStatus(t){ statusEl.textContent = t || ""; }
+    function clamp(arr, n){ while(arr.length > n) arr.shift(); }
+
+    function pushSample({ts, speedKmh, pressurePsi}) {
+      const maxN = Math.max(50, Number(maxPointsEl.value) || 300);
+      if (Number.isFinite(speedKmh)) {
+        speedChart.data.datasets[0].data.push({ x: ts, y: speedKmh });
+        clamp(speedChart.data.datasets[0].data, maxN);
+        latestSpeedEl.textContent = `Gần nhất: ${speedKmh.toFixed(1)} km/h @ ${new Date(ts).toLocaleTimeString('vi-VN')}`;
+      }
+      if (Number.isFinite(pressurePsi)) {
+        pressureChart.data.datasets[0].data.push({ x: ts, y: pressurePsi });
+        clamp(pressureChart.data.datasets[0].data, maxN);
+        latestPressureEl.textContent = `Gần nhất: ${pressurePsi.toFixed(1)} PSI @ ${new Date(ts).toLocaleTimeString('vi-VN')}`;
+      }
+      speedChart.update("none");
+      pressureChart.update("none");
+    }
+
+    // ============ MQTT ============
+    let client = null;
+    let isDemo = false;
+    let demoTimer = null;
+
+    const btnConnect = document.getElementById("btnConnect");
+    const btnDisconnect = document.getElementById("btnDisconnect");
+    const btnDemo = document.getElementById("btnDemo");
+
+    btnConnect.addEventListener("click", () => {
+      const brokerUrl = document.getElementById("brokerUrl").value.trim();
+      const topic = document.getElementById("topic").value.trim();
+      if (!brokerUrl || !topic) {
+        setStatus("⚠️ Nhập broker URL và topic trước.");
+        return;
+      }
+      connectMQTT(brokerUrl, topic);
+    });
+
+    btnDisconnect.addEventListener("click", () => disconnectMQTT());
+
+    btnDemo.addEventListener("click", () => {
+      if (demoTimer) { clearInterval(demoTimer); demoTimer=null; isDemo=false; btnDemo.textContent="Demo (không cần MQTT)"; setStatus(""); return; }
+      // Demo: bơm điểm giả định mỗi 1s
+      isDemo = true;
+      btnDemo.textContent="Tắt Demo";
+      setStatus("🧪 Demo đang phát dữ liệu giả...");
+      let baseSpeed = 52 + Math.random()*8;
+      let basePsi = 31 + Math.random()*1.5;
+      demoTimer = setInterval(() => {
+        baseSpeed += (Math.random()*2-1);
+        basePsi   += (Math.random()*0.2-0.1);
+        pushSample({ ts: Date.now(), speedKmh: baseSpeed, pressurePsi: basePsi });
+      }, 1000);
+    });
+
+    function connectMQTT(brokerUrl, topic) {
+      try {
+        if (client) { client.end(true); client=null; }
+        setStatus("⏳ Đang kết nối MQTT...");
+        client = mqtt.connect(brokerUrl, {
+          // Tùy broker: có thể cần username/password, clientId
+          // username: "user",
+          // password: "pass",
+          // clientId: "web-"+Math.random().toString(16).slice(2),
+          clean: true,
+          reconnectPeriod: 2000
+        });
+
+        client.on("connect", () => {
+          setStatus("✅ MQTT connected. Subscribing...");
+          client.subscribe(topic, (err) => {
+            if (err) setStatus("❌ Subscribe lỗi.");
+            else {
+              setStatus(`✅ Subscribed: ${topic}`);
+              btnConnect.disabled = true;
+              btnDisconnect.disabled = false;
+            }
+          });
+        });
+
+        client.on("message", (_topic, payloadBuf) => {
+          const plateFilter = plateFilterEl.value.trim();
+          let data = null;
+          try {
+            const text = payloadBuf.toString();
+            data = JSON.parse(text);
+          } catch (e) {
+            // Nếu payload không phải JSON, bỏ qua
+            return;
+          }
+          // Filter plate (nếu có)
+          if (plateFilter && data.plate && data.plate !== plateFilter) return;
+
+          const ts = Number(data.ts) || Date.now();
+          const speedKmh = Number(data.speedKmh);
+          const pressurePsi = Number(data.pressurePsi);
+          pushSample({ ts, speedKmh, pressurePsi });
+        });
+
+        client.on("error", (e) => setStatus("❌ MQTT error: " + (e?.message||e)));
+        client.on("reconnect", () => setStatus("↻ MQTT reconnecting..."));
+        client.on("close", () => setStatus("ℹ️ MQTT closed."));
+
+      } catch (e) {
+        setStatus("❌ Không thể kết nối MQTT.");
+      }
+    }
+
+    function disconnectMQTT() {
+      if (client) {
+        client.end(true, () => setStatus("👋 Đã ngắt MQTT."));
+        client = null;
+      }
+      btnConnect.disabled = false;
+      btnDisconnect.disabled = true;
+    }
+
+    // Xóa dữ liệu khi đổi filter biển số (tuỳ chọn)
+    plateFilterEl.addEventListener("change", () => {
+      speedChart.data.datasets[0].data = [];
+      pressureChart.data.datasets[0].data = [];
+      speedChart.update(); pressureChart.update();
+    });
+  </script>
+</body>
+</html>

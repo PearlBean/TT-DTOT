@@ -24,6 +24,13 @@ import fetch from "node-fetch";
 import http from "http";
 import { WebSocketServer } from "ws";
 
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
 // Config
 const OVERPASS_URL = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 const PORT = process.env.PORT || 3000;
@@ -34,6 +41,15 @@ const DEFAULT_MARGIN = 5;             // km/h
 const app = express();
 app.use(express.json());
 const server = http.createServer(app);
+
+// Phục vụ file tĩnh (HTML, CSS, JS) từ thư mục public
+app.use(express.static(path.join(__dirname, "public")));
+
+// Nếu người dùng truy cập "/", gửi file main.html
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "main.html"));
+});
+
 
 // Tiny cache
 const cache = new Map(); // key -> { value, expires }
