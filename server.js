@@ -1,43 +1,56 @@
 /*
  * server.js
  *
- * Mục đích:
- *   - Cung cấp REST API /limit và /compare để truy vấn giới hạn tốc độ xung quanh 1 toạ độ
- *     (dùng OSM Overpass) và trả về kết quả so sánh với tốc độ gửi lên.
- *   - Cung cấp WebSocket endpoint tại /ws cho các client (ví dụ ESP32) gửi vị trí+tốc độ
- *     và nhận về kết quả so sánh (overMax / underMin).
+ * - ESP32 gửi tốc độ + áp suất + GPS qua WebSocket /ws
+ * - Server:
+ *    + Hỏi OSM/Overpass để lấy giới hạn tốc độ
+ *    + Trả kết quả so sánh cho ESP32 (overMax / underMin)
+ *    + Lưu mẫu vào MongoDB (collection "telemetry")
+ *    + Broadcast mẫu mới cho web dashboard (client WebSocket)
  *
- * Endpoints chính:
- *   - GET  /limit?lat=<lat>&lng=<lng>
- *   - POST /compare   { lat, lng, speedKmh, margin }
- *   - WS   /ws         (nhận JSON { lat, lng, speedKmh, margin })
- *
- * Cấu hình qua biến môi trường:
- *   - OVERPASS_URL (mặc định: https://overpass-api.de/api/interpreter)
- *   - PORT (mặc định: 3000)
- *
- * Chạy: node server.js  (package.json có "type": "module")
+ * - Web (trình duyệt):
+ *    + Kết nối WebSocket /ws, gửi { type: "dashboard_subscribe" }
+ *    + Nhận "telemetry_update" để update realtime
+ *    + Gọi REST /history để lấy lịch sử từ MongoDB
  */
 
 import express from "express";
 import fetch from "node-fetch";
 import http from "http";
 import { WebSocketServer } from "ws";
-
 import path from "path";
 import { fileURLToPath } from "url";
+import { MongoClient } from "mongodb";   // <= MONGO
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
-// Config
+// ====== Config chung ======
 const OVERPASS_URL = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 const PORT = process.env.PORT || 3000;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 const DEFAULT_MARGIN = 5;             // km/h
 
-// App & HTTP server
+// ====== Config MongoDB ======
+const MONGO_URL = process.env.MONGO_URL || "mongodb://127.0.0.1:27017";
+const MONGO_DB_NAME = process.env.MONGO_DB_NAME || "vehicle_monitor";
+
+let mongoClient;
+let telemetryCol; // collection lưu dữ liệu
+
+async function initMongo() {
+  try {
+    mongoClient = new MongoClient(MONGO_URL);
+    await mongoClient.connect();
+    const db = mongoClient.db(MONGO_DB_NAME);
+    telemetryCol = db.collection("telemetry");
+    console.log(`[Mongo] Connected to ${MONGO_URL}, db=${MONGO_DB_NAME}, collection=telemetry`);
+  } catch (err) {
+    console.error("[Mongo] Connect error:", err);
+  }
+}
+
+// ====== Express + HTTP server ======
 const app = express();
 app.use(express.json());
 const server = http.createServer(app);
@@ -50,8 +63,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "main.html"));
 });
 
-
-// Tiny cache
+// ==== Tiny cache cho Overpass ====
 const cache = new Map(); // key -> { value, expires }
 const coordKey = (lat, lng) => `${lat.toFixed(5)},${lng.toFixed(5)}`;
 const setCache = (k, v, ttl = CACHE_TTL_MS) => cache.set(k, { v, e: Date.now() + ttl });
@@ -84,7 +96,7 @@ function parseSpeed(raw) {
 }
 const roughDist2 = (a, b, c, d) => (a - c) * (a - c) + (b - d) * (b - d);
 
-// Fallback MAX theo loại đường (demo tuỳ chỉnh)
+// Fallback MAX theo loại đường
 const FALLBACK_MAX_BY_HIGHWAY = {
   motorway: 100,
   trunk: 80,
@@ -95,7 +107,7 @@ const FALLBACK_MAX_BY_HIGHWAY = {
   service: 20,
 };
 
-// Core: tìm giới hạn tốc độ gần (lat,lng) từ OSM (có thể fallback theo highway)
+// Core: tìm giới hạn tốc độ gần (lat,lng) từ OSM
 async function queryOSMSpeeds(lat, lng) {
   const k = coordKey(lat, lng);
   const cached = getCache(k);
@@ -133,7 +145,7 @@ async function queryOSMSpeeds(lat, lng) {
 
       let dist2 = 1e12;
       if (center) dist2 = roughDist2(lat, lng, center.lat, center.lon);
-      const score = (hasAny ? 0 : 1e6) + dist2; // ưu tiên có max/min, rồi gần nhất
+      const score = (hasAny ? 0 : 1e6) + dist2;
       if (score < bestScore) {
         bestScore = score;
         best = { wayId: e.id, highway: t.highway || null, maxRaw, minRaw };
@@ -165,7 +177,7 @@ async function queryOSMSpeeds(lat, lng) {
   return null;
 }
 
-// REST: GET /limit & POST /compare
+// ===== REST: GET /limit & POST /compare =====
 app.get("/limit", async (req, res) => {
   const lat = parseFloat(req.query.lat), lng = parseFloat(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: "invalid_lat_lng" });
@@ -214,9 +226,7 @@ app.post("/compare", async (req, res) => {
       highway: r.highway,
       unit: "km/h",
       note:
-        (r.min.value == null ? "Không có minspeed trong OSM. " : "") +
-        (r.max.fallbackUsed ? "Max dùng fallback theo loại đường. " : "") +
-        (r.min.fallbackUsed ? "Min dùng fallback theo loại đường. " : "")
+        (r.min.value == null ? "Không có minspeed trong OSM. " : "")
     };
     log("REST OUT", peer, { limitKmh: payload.limitKmh, minKmh: payload.minKmh, overMax, underMin, highway: payload.highway, fbMax: r.max.fallbackUsed, fbMin: r.min.fallbackUsed });
     return res.json(payload);
@@ -226,7 +236,54 @@ app.post("/compare", async (req, res) => {
   }
 });
 
-// WebSocket
+// ===== REST: GET /history – lấy dữ liệu từ MongoDB =====
+app.get("/history", async (req, res) => {
+  if (!telemetryCol) return res.status(503).json({ error: "mongo_not_ready" });
+
+  const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+
+  let query = {};
+  const from = req.query.from ? new Date(req.query.from) : null;
+  const to   = req.query.to   ? new Date(req.query.to)   : null;
+  const plate = req.query.plate ? String(req.query.plate).trim().toUpperCase() : null;
+if (plate) query.licensePlate = plate;
+
+  if (from || to) {
+    query.timestamp = {};
+    if (from) query.timestamp.$gte = from;
+    if (to)   query.timestamp.$lte = to;
+  }
+
+  try {
+    const docs = await telemetryCol.find(query)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
+    res.json(docs);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+app.get("/check-plate", async (req, res) => {
+  if (!telemetryCol) return res.status(503).json({ error: "mongo_not_ready" });
+
+  const plate = (req.query.plate || "").toString().trim().toUpperCase();
+  if (!plate) return res.status(400).json({ error: "missing_plate" });
+
+  try {
+    // Chỉ cần xe nào đã từng gửi data là coi như biển số hợp lệ
+    const doc = await telemetryCol.findOne({ licensePlate: plate });
+    return res.json({ exists: !!doc });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "server_error" });
+  }
+});
+
+
+// ====== WebSocket ======
 const wss = new WebSocketServer({ noServer: true });
 
 // Rate-limit xử lý mỗi client (ms)
@@ -238,6 +295,7 @@ wss.on("connection", (ws, req) => {
   ws.lastHandledAt = 0;
   ws.id = WS_ID_SEQ++;
   ws.peer = req.socket?.remoteAddress || "ws";
+  ws.clientType = "unknown"; // "device" (ESP32) | "dashboard"
 
   log("WS  OPEN", `#${ws.id}`, ws.peer);
 
@@ -245,13 +303,28 @@ wss.on("connection", (ws, req) => {
 
   ws.on("message", async (msg) => {
     let payload;
-    try { payload = JSON.parse(msg.toString()); }
-    catch {
+    try {
+      payload = JSON.parse(msg.toString());
+    } catch {
       log("WS  IN  ", `#${ws.id}`, ws.peer, "invalid_json:", msg.toString());
       return ws.send(JSON.stringify({ error: "invalid_json" }));
     }
 
-    const { lat, lng, speedKmh, margin } = payload || {};
+    // ---- Dashboard đăng ký nhận realtime ----
+    if (payload.type === "dashboard_subscribe") {
+      ws.clientType = "dashboard";
+      log("WS  IN  ", `#${ws.id}`, ws.peer, "dashboard_subscribed");
+      ws.send(JSON.stringify({ type: "dashboard_ack" }));
+      return;
+    }
+
+    // ---- Mặc định: client là thiết bị (ESP32) ----
+    if (ws.clientType === "unknown") ws.clientType = "device";
+
+    const { lat, lng, speedKmh, margin, pressureBar } = payload || {};
+const plateRaw = (payload.licensePlate || payload.plate || "").toString().trim();
+const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
+
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(speedKmh)) {
       log("WS  IN  ", `#${ws.id}`, ws.peer, "invalid_payload:", payload);
       return ws.send(JSON.stringify({ error: "invalid_payload" }));
@@ -276,6 +349,9 @@ wss.on("connection", (ws, req) => {
       const overMax  = limitMax != null ? (speedKmh > limitMax + marginKmh) : false;
       const underMin = limitMin != null ? (speedKmh < Math.max(0, limitMin - marginKmh)) : false;
 
+      const note =
+        (r.min.value == null ? "Không có minspeed. " : "")
+
       const out = {
         type: "compare_result",
         limitKmh: limitMax,
@@ -284,13 +360,60 @@ wss.on("connection", (ws, req) => {
         underMin,
         highway: r.highway,
         unit: "km/h",
-        note:
-          (r.min.value == null ? "Không có minspeed. " : "") +
-          (r.max.fallbackUsed ? "Max dùng fallback theo loại đường. " : "") +
-          (r.min.fallbackUsed ? "Min dùng fallback theo loại đường. " : "")
+        note
       };
 
-      log("WS  OUT ", `#${ws.id}`, ws.peer, { limitKmh: out.limitKmh, minKmh: out.minKmh, overMax, underMin, highway: out.highway, fbMax: r.max.fallbackUsed, fbMin: r.min.fallbackUsed });
+      // ==== Lưu vào MongoDB ====
+      if (telemetryCol) {
+        const doc = {
+          timestamp: new Date(),
+          lat,
+          lng,
+          speedKmh,
+          pressureBar: typeof pressureBar === "number" ? pressureBar : null,
+          limitKmh: limitMax,
+          minKmh: limitMin,
+          overMax,
+          underMin,
+          highway: r.highway || null,
+          note,
+          licensePlate
+        };
+        try {
+          await telemetryCol.insertOne(doc);
+        } catch (err) {
+          console.error("[Mongo] insert error:", err);
+        }
+
+        // ==== Broadcast cho tất cả dashboard đang mở ====
+        const broadcast = {
+          type: "telemetry_update",
+          ...doc,
+          timestamp: doc.timestamp.toISOString(),
+        };
+
+        wss.clients.forEach((client) => {
+          if (
+            client !== ws &&
+            client.readyState === 1 && // WebSocket.OPEN
+            client.clientType === "dashboard"
+          ) {
+            client.send(JSON.stringify(broadcast));
+          }
+        });
+      }
+
+      log("WS  OUT ", `#${ws.id}`, ws.peer, {
+        limitKmh: out.limitKmh,
+        minKmh: out.minKmh,
+        overMax,
+        underMin,
+        highway: out.highway,
+        fbMax: r.max.fallbackUsed,
+        fbMin: r.min.fallbackUsed
+      });
+
+      // Gửi lại cho ESP32
       ws.send(JSON.stringify(out));
     } catch (e) {
       console.error(e);
@@ -321,4 +444,5 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(PORT, () => {
   log(`HTTP: http://localhost:${PORT}   WS: ws://localhost:${PORT}/ws`);
+  initMongo();   // Khởi động MongoDB sau khi server listen
 });
