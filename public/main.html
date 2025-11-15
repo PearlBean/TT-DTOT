@@ -1016,33 +1016,36 @@
         chartSpeed = samples.map((s) => s.speedKmh ?? 0);
         chartPressure = samples.map((s) => s.pressureBar ?? 0); // bar → PSI
 
-        speedChart = new Chart(ctxSpeed, {
-          type: "line",
-          data: {
-            labels: chartLabels,
-            datasets: [
-              {
-                label: "Tốc độ (km/h)",
-                data: chartSpeed,
-                fill: false,
-                tension: 0.2,
-              },
-            ],
-          },
-          options: {
-            animation: false,
-            responsive: true,
-            scales: {
-              x: { display: true, title: { display: true, text: "Thời gian" } },
-              y: {
-                min: 0,
-                max: 120,
-                title: { display: true, text: "Tốc độ (km/h)" },
-                ticks: { stepSize: 20 },
-              },
-            },
-          },
-        });
+speedChart = new Chart(ctxSpeed, {
+  type: "line",
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: "Tốc độ (km/h)",
+        data: chartSpeed,
+        fill: false,
+        tension: 0.2,
+      },
+    ],
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    scales: {
+      x: { display: true, title: { display: true, text: "Thời gian" } },
+      y: {
+        beginAtZero: true,
+        grace: "10%",
+        title: { display: true, text: "Tốc độ (km/h)" },
+        ticks: {
+          // callback: (value) => value + " km/h",
+        },
+      },
+    },
+  },
+});
+
 
         pressureChart = new Chart(ctxPressure, {
           type: "line",
@@ -1248,61 +1251,64 @@ historyChartInstance = new Chart(ctx, {
 
       }
 
-      function applyHistoryFilter(initial = false) {
-        if (!Array.isArray(telemetryAll)) telemetryAll = [];
+        function getLocalDateStr(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-        // Đọc bộ lọc
-        const fromInput = document.getElementById("historyDateFrom");
-        const toInput = document.getElementById("historyDateTo");
+function applyHistoryFilter(initial = false) {
+  if (!Array.isArray(telemetryAll)) telemetryAll = [];
 
-        let fromTime = null;
-        let toTime = null;
+  const fromInput = document.getElementById("historyDateFrom");
+  const toInput   = document.getElementById("historyDateTo");
 
-        if (fromInput && fromInput.value) {
-          // YYYY-MM-DD -> 00:00 ngày đó
-          fromTime = new Date(fromInput.value + "T00:00:00").getTime();
-        }
-        if (toInput && toInput.value) {
-          // Đến cuối ngày
-          toTime = new Date(toInput.value + "T23:59:59").getTime();
-        }
+  const fromVal = fromInput && fromInput.value ? fromInput.value : ""; // "2025-11-14"
+  const toVal   = toInput   && toInput.value   ? toInput.value   : "";
 
-        // Lọc theo ngày (và đúng biển số hiện tại)
-        let filtered = telemetryAll.filter((item) => {
-          const ts = new Date(
-            item.timestamp || item.ts || Date.now()
-          ).getTime();
-          if (fromTime && ts < fromTime) return false;
-          if (toTime && ts > toTime) return false;
+  // Lọc theo NGÀY UTC (giống format trong DB / API)
+  let filtered = telemetryAll.filter((item) => {
+    const ts = item.timestamp || item.ts || Date.now();
+    const day = getLocalDateStr(ts);
 
-          if (window.currentPlate && item.licensePlate) {
-            return item.licensePlate === window.currentPlate;
-          }
-          return true;
-        });
+    if (!day) return false;
 
-        // Sắp xếp tăng dần theo thời gian
-        filtered.sort(
-          (a, b) =>
-            new Date(a.timestamp || a.ts || 0) -
-            new Date(b.timestamp || b.ts || 0)
-        );
+    if (fromVal && day < fromVal) return false;
+    if (toVal   && day > toVal)   return false;
 
-        // Không cho tràn lan: chỉ lấy tối đa MAX_POINTS mẫu mới nhất
-        if (filtered.length > MAX_POINTS) {
-          filtered = filtered.slice(filtered.length - MAX_POINTS);
-        }
+    // Nếu đang đăng nhập theo 1 biển số thì chỉ giữ đúng biển đó
+    if (window.currentPlate && item.licensePlate) {
+      return item.licensePlate === window.currentPlate;
+    }
 
-        telemetryHistory = filtered;
+    return true;
+  });
 
-        // Cập nhật bảng + chart
-        renderHistoryTable();
-        //initRealtimeCharts();
+  // Sắp xếp tăng dần theo thời gian
+  filtered.sort(
+    (a, b) =>
+      new Date(a.timestamp || a.ts || 0) -
+      new Date(b.timestamp || b.ts || 0)
+  );
 
-        if (!initial && telemetryHistory.length === 0) {
-          showToast("Không có dữ liệu trong khoảng thời gian đã chọn", "error");
-        }
-      }
+  // Không cho tràn lan: chỉ lấy tối đa MAX_POINTS mẫu mới nhất
+  if (filtered.length > MAX_POINTS) {
+    filtered = filtered.slice(filtered.length - MAX_POINTS);
+  }
+
+  telemetryHistory = filtered;
+
+  // Cập nhật biểu đồ
+  renderHistoryTable();
+
+  if (!initial && telemetryHistory.length === 0) {
+    showToast("Không có dữ liệu trong khoảng thời gian đã chọn", "error");
+  }
+}
+
 
       /* ========= WEBSOCKET DASHBOARD <-> SERVER ========= */
 
