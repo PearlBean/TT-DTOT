@@ -422,35 +422,33 @@
             </div>
             <div class="chart-container mb-6">
               <h3 class="text-lg font-bold text-gray-800 mb-4">Bộ lọc</h3>
-              <div class="flex flex-wrap gap-4 items-end mb-4">
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2"
-                    >Xe đang xem</label
-                  >
+              <div class="flex flex-nowrap gap-2 items-end w-full">
+                <div class="flex-shrink-0 min-w-max">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Xe</label>
                   <div
                     id="historyCurrentPlate"
-                    class="px-3 py-2 rounded-lg bg-gray-100 text-sm text-gray-700 h-10 flex items-center"
+                    class="px-2 py-2 rounded-lg bg-gray-100 text-xs text-gray-700 h-10 flex items-center whitespace-nowrap"
                   >
-                    Chưa chọn xe
+                    Chưa chọn
                   </div>
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ ngày</label>
-                  <input type="date" id="historyDateFrom" class="form-input h-10" style="width: 140px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Từ ngày</label>
+                  <input type="date" id="historyDateFrom" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ giờ</label>
-                  <input type="time" id="historyTimeFrom" class="form-input h-10" style="width: 120px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Từ giờ</label>
+                  <input type="time" id="historyTimeFrom" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến ngày</label>
-                  <input type="date" id="historyDateTo" class="form-input h-10" style="width: 140px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Đến ngày</label>
+                  <input type="date" id="historyDateTo" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến giờ</label>
-                  <input type="time" id="historyTimeTo" class="form-input h-10" style="width: 120px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Đến giờ</label>
+                  <input type="time" id="historyTimeTo" class="form-input h-10 text-xs w-full" />
                 </div>
-                <button id="applyHistoryFilter" class="btn-primary h-10 flex-shrink-0">
+                <button id="applyHistoryFilter" class="btn-primary h-10 flex-shrink-0 text-sm px-3 whitespace-nowrap">
                   Áp dụng
                 </button>
               </div>
@@ -482,39 +480,33 @@
               <h3 class="text-lg font-bold text-gray-800 mb-4">
                 Thống kê cảnh báo theo ngày
               </h3>
-              <div class="flex flex-wrap gap-4 items-end mb-4">
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Xe đang xem
-                  </label>
+              <div class="flex flex-nowrap gap-2 items-end w-full">
+                <div class="flex-shrink-0 min-w-max">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Xe</label>
                   <div
                     id="alertStatsCurrentPlate"
-                    class="px-3 py-2 rounded-lg bg-gray-100 text-sm text-gray-700 h-10 flex items-center"
+                    class="px-2 py-2 rounded-lg bg-gray-100 text-xs text-gray-700 h-10 flex items-center whitespace-nowrap"
                   >
-                    Chưa chọn xe
+                    Chưa chọn
                   </div>
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Từ ngày
-                  </label>
-                  <input type="date" id="alertStatsFrom" class="form-input h-10" style="width: 140px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Từ ngày</label>
+                  <input type="date" id="alertStatsFrom" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ giờ</label>
-                  <input type="time" id="alertStatsTimeFrom" class="form-input h-10" style="width: 120px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Từ giờ</label>
+                  <input type="time" id="alertStatsTimeFrom" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Đến ngày
-                  </label>
-                  <input type="date" id="alertStatsTo" class="form-input h-10" style="width: 140px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Đến ngày</label>
+                  <input type="date" id="alertStatsTo" class="form-input h-10 text-xs w-full" />
                 </div>
-                <div class="flex-shrink-0">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến giờ</label>
-                  <input type="time" id="alertStatsTimeTo" class="form-input h-10" style="width: 120px;" />
+                <div class="flex-1 min-w-0">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Đến giờ</label>
+                  <input type="time" id="alertStatsTimeTo" class="form-input h-10 text-xs w-full" />
                 </div>
-                <button id="btnAlertStatsApply" class="btn-primary h-10 flex-shrink-0">
+                <button id="btnAlertStatsApply" class="btn-primary h-10 flex-shrink-0 text-sm px-3 whitespace-nowrap">
                   Áp dụng
                 </button>
               </div>
@@ -911,11 +903,61 @@
           return;
         }
 
-        const samples = [...telemetryHistory].sort(
+        let samples = [...telemetryHistory].sort(
           (a, b) =>
             new Date(a.timestamp || a.ts || 0) -
             new Date(b.timestamp || b.ts || 0)
         );
+
+        // Smart resampling khi dữ liệu quá nhiều
+        const MAX_CHART_POINTS = 200;
+        if (samples.length > MAX_CHART_POINTS) {
+          const bucketCount = Math.ceil(samples.length / MAX_CHART_POINTS);
+          const samplesResampled = [];
+          
+          for (let i = 0; i < samples.length; i += bucketCount) {
+            const bucket = samples.slice(i, i + bucketCount);
+            if (bucket.length === 0) continue;
+            
+            // Lấy min và max của tốc độ và áp suất trong bucket
+            const speeds = bucket.map(s => s.speedKmh ?? 0);
+            const pressures = bucket.map(s => s.pressureBar ?? 0);
+            
+            const minSpeedIdx = speeds.indexOf(Math.min(...speeds));
+            const maxSpeedIdx = speeds.indexOf(Math.max(...speeds));
+            const minPressureIdx = pressures.indexOf(Math.min(...pressures));
+            const maxPressureIdx = pressures.indexOf(Math.max(...pressures));
+            
+            // Thêm điểm đầu tiên của bucket
+            samplesResampled.push(bucket[0]);
+            
+            // Thêm điểm có min/max tốc độ nếu chúng không phải điểm đầu
+            if (minSpeedIdx > 0) {
+              samplesResampled.push(bucket[minSpeedIdx]);
+            }
+            if (maxSpeedIdx > 0 && maxSpeedIdx !== minSpeedIdx) {
+              samplesResampled.push(bucket[maxSpeedIdx]);
+            }
+            
+            // Thêm điểm có min/max áp suất nếu chúng không phải điểm đầu
+            if (minPressureIdx > 0 && minPressureIdx !== minSpeedIdx && minPressureIdx !== maxSpeedIdx) {
+              samplesResampled.push(bucket[minPressureIdx]);
+            }
+            if (maxPressureIdx > 0 && maxPressureIdx !== minSpeedIdx && maxPressureIdx !== maxSpeedIdx && maxPressureIdx !== minPressureIdx) {
+              samplesResampled.push(bucket[maxPressureIdx]);
+            }
+            
+            // Thêm điểm cuối cùng của bucket nếu không phải điểm đầu
+            if (bucket.length > 1) {
+              samplesResampled.push(bucket[bucket.length - 1]);
+            }
+          }
+          
+          // Sắp xếp lại theo timestamp
+          samples = samplesResampled.sort((a, b) =>
+            new Date(a.timestamp || a.ts || 0) - new Date(b.timestamp || b.ts || 0)
+          );
+        }
 
         const labels = samples.map((item) => {
           const t = new Date(item.timestamp || item.ts || Date.now());
@@ -945,6 +987,8 @@
                 yAxisID: "ySpeed",
                 tension: 0.2,
                 fill: false,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
               },
               {
                 label: "Áp suất (bar)",
@@ -952,6 +996,8 @@
                 yAxisID: "yPressure",
                 tension: 0.2,
                 fill: false,
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
               },
             ],
           },
