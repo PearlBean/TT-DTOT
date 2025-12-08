@@ -17,11 +17,11 @@ const char* WIFI_SSID = "P4";          // <-- WiFi
 const char* WIFI_PASS = "p45024ltm";   // <-- WiFi
 
 // ws://<PC-IP>:3000/ws
-const char* WS_HOST = "192.168.1.8";   // <-- IP PC chạy server
+const char* WS_HOST = "192.168.1.15";   // <-- IP PC chạy server
 const uint16_t WS_PORT = 3000;
 const char* WS_PATH = "/ws";
 
-const char* LICENSE_PLATE = "51F-123.45";
+const char* LICENSE_PLATE = "72F-345.67";
 
 // ================== OLED / LED ==================
 #define LED_PIN 19
@@ -296,6 +296,7 @@ bool readPressureBMP180(float &barOut) {
   return true;
 }
 
+// ================== Nhập toạ độ & data từ Serial ==================
 void handleSerialCoordinateInput() {
   if (!Serial.available()) return;
 
@@ -309,15 +310,27 @@ void handleSerialCoordinateInput() {
       if (line.length() > 0) {
         // Đổi dấu phẩy thành khoảng trắng để dễ tách
         line.replace(',', ' ');
-        int sep = line.indexOf(' ');
-        if (sep > 0) {
-          String latStr = line.substring(0, sep);
-          String lngStr = line.substring(sep + 1);
-          latStr.trim();
-          lngStr.trim();
 
-          double lat = latStr.toFloat();
-          double lng = lngStr.toFloat();
+        float vals[4];
+        int count = 0;
+
+        int idx = 0;
+        while (idx < line.length() && count < 4) {
+          int next = line.indexOf(' ', idx);
+          if (next < 0) next = line.length();
+          String token = line.substring(idx, next);
+          token.trim();
+          if (token.length() > 0) {
+            vals[count++] = token.toFloat();
+          }
+          idx = next + 1;
+        }
+
+        // vals[0] = lat, vals[1] = lng, vals[2] = speed, vals[3] = pressure
+
+        if (count >= 2) {
+          double lat = vals[0];
+          double lng = vals[1];
 
           // Không check quá chặt, chỉ tránh đều =0
           if (lat != 0.0 || lng != 0.0) {
@@ -336,8 +349,18 @@ void handleSerialCoordinateInput() {
           } else {
             Serial.println(F("[SER] Invalid coord (both 0)"));
           }
-        } else {
-          Serial.println(F("[SER] Line format error. Use: lat,lng or lat lng"));
+        }
+
+        if (count >= 3) {
+          speed_kmh = vals[2];
+          Serial.print(F("[SER] Manual speed_kmh = "));
+          Serial.println(speed_kmh, 2);
+        }
+
+        if (count >= 4) {
+          pressure_bar = vals[3];
+          Serial.print(F("[SER] Manual pressure_bar = "));
+          Serial.println(pressure_bar, 2);
         }
       }
       line = "";
@@ -347,6 +370,7 @@ void handleSerialCoordinateInput() {
     }
   }
 }
+
 
 // ================== Setup / loop ==================
 void setup() {
@@ -397,8 +421,6 @@ void setup() {
 }
 
 void loop() {
-
-  handleSerialCoordinateInput();
   // 1) Nhấp nháy + WS
   updateBlink();
   ws.loop();
@@ -406,9 +428,12 @@ void loop() {
   // 2) Cập nhật GPS + BMP180
   pollGPS();
 
-  float pbar;
-  if (readPressureBMP180(pbar)) {
-    pressure_bar = pbar;
+  // CHỈ đọc cảm biến áp suất thật nếu KHÔNG nhập tay
+  if (!manualCoord) {
+    float pbar;
+    if (readPressureBMP180(pbar)) {
+      pressure_bar = pbar;
+    }
   }
 
   // 3) Tính tốc độ từ encoder mỗi SAMPLE_MS
@@ -417,27 +442,35 @@ void loop() {
   if (nowMs - lastCalcMs >= SAMPLE_MS) {
     lastCalcMs = nowMs;
 
-    noInterrupts();
-    uint32_t pulses = encPulseCount;
-    encPulseCount = 0;
-    interrupts();
+    // CHỈ tính tốc độ encoder nếu KHÔNG nhập tay
+    if (!manualCoord) {
+      noInterrupts();
+      uint32_t pulses = encPulseCount;
+      encPulseCount = 0;
+      interrupts();
 
-    float revolutions = (float)pulses / (float)PULSES_PER_REV;    // vòng trong SAMPLE_MS
-    float rps = revolutions * (1000.0f / (float)SAMPLE_MS);       // vòng/giây
-    float v_mps = rps * WHEEL_CIRCUMFERENCE_M;                    // m/s
-    speed_kmh = v_mps * 3.6f;                                     // km/h
-
-    Serial.printf("[ENC] pulses=%lu -> %.2f km/h | P=%.3f bar | GPS:%s (age %lus)\n",
-      (unsigned long)pulses, speed_kmh, pressure_bar, gpsFix ? "FIX" : "NO", (lastFixMs==0)?999999:((millis()-lastFixMs)/1000));
+      float revolutions = (float)pulses / (float)PULSES_PER_REV;
+      float rps = revolutions * (1000.0f / (float)SAMPLE_MS);
+      float v_mps = rps * WHEEL_CIRCUMFERENCE_M;
+      speed_kmh = v_mps * 3.6f;
+      
+      Serial.printf("[ENC] Real: %.2f km/h | Press: %.2f bar\n", speed_kmh, pressure_bar);
+    } else {
+      // (Tuỳ chọn) In ra log nhắc nhở đang ở chế độ Manual
+      // Serial.printf("[MANUAL] Sim: %.2f km/h | Press: %.2f bar\n", speed_kmh, pressure_bar);
+    }
   }
+
+  handleSerialCoordinateInput();
 
   // 4) Gửi WS
   sendWS();
 
   // 5) Hiển thị + LED
-  bool pressHigh = (pressure_bar > PRESSURE_LIMIT_MAX);
-  bool pressLow  = (pressure_bar < PRESSURE_LIMIT_MIN);
+  bool pressHigh = (pressure_bar > PRESSURE_LIMIT_MAX); // > 2.0 bar
+  bool pressLow  = (pressure_bar < PRESSURE_LIMIT_MIN); // < 1.0 bar
   bool anyAlert  = srv_overMax || srv_underMin || pressHigh || pressLow;
+  
   updateLED();
   if (anyAlert) showAlert(); else showNormal(true);
 

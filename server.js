@@ -20,16 +20,21 @@ import http from "http";
 import { WebSocketServer } from "ws";
 import path from "path";
 import { fileURLToPath } from "url";
-import { MongoClient } from "mongodb";   // <= MONGO
+import { MongoClient } from "mongodb"; // <= MONGO
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ====== Config chung ======
-const OVERPASS_URL = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
+const OVERPASS_URL =
+  process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 const PORT = process.env.PORT || 3000;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
-const DEFAULT_MARGIN = 5;             // km/h
+const DEFAULT_MARGIN = 5; // km/h
+
+// Ngưỡng cảnh báo áp suất (bar) - khớp với main3.ino
+const PRESSURE_MIN_BAR = 1.0;
+const PRESSURE_MAX_BAR = 2.0;
 
 // ====== Config MongoDB ======
 const MONGO_URL = process.env.MONGO_URL || "mongodb://127.0.0.1:27017";
@@ -44,7 +49,9 @@ async function initMongo() {
     await mongoClient.connect();
     const db = mongoClient.db(MONGO_DB_NAME);
     telemetryCol = db.collection("telemetry");
-    console.log(`[Mongo] Connected to ${MONGO_URL}, db=${MONGO_DB_NAME}, collection=telemetry`);
+    console.log(
+      `[Mongo] Connected to ${MONGO_URL}, db=${MONGO_DB_NAME}, collection=telemetry`
+    );
   } catch (err) {
     console.error("[Mongo] Connect error:", err);
   }
@@ -66,18 +73,23 @@ app.get("/", (req, res) => {
 // ==== Tiny cache cho Overpass ====
 const cache = new Map(); // key -> { value, expires }
 const coordKey = (lat, lng) => `${lat.toFixed(5)},${lng.toFixed(5)}`;
-const setCache = (k, v, ttl = CACHE_TTL_MS) => cache.set(k, { v, e: Date.now() + ttl });
+const setCache = (k, v, ttl = CACHE_TTL_MS) =>
+  cache.set(k, { v, e: Date.now() + ttl });
 const getCache = (k) => {
   const c = cache.get(k);
   if (!c) return null;
-  if (c.e < Date.now()) { cache.delete(k); return null; }
+  if (c.e < Date.now()) {
+    cache.delete(k);
+    return null;
+  }
   return c.v;
 };
 
 // Logging helpers
 const ts = () => new Date().toLocaleString("vi-VN", { hour12: false });
 const log = (...args) => console.log(`[${ts()}]`, ...args);
-const round = (x, d = 3) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
+const round = (x, d = 3) =>
+  x == null ? null : Math.round(x * 10 ** d) / 10 ** d;
 const shortCoord = (lat, lng) => `${round(lat, 5)},${round(lng, 5)}`;
 
 // Helpers
@@ -139,8 +151,10 @@ async function queryOSMSpeeds(lat, lng) {
     for (const e of els) {
       const t = e.tags || {};
       const center = e.center;
-      const maxRaw = t.maxspeed || t["maxspeed:forward"] || t["maxspeed:backward"] || null;
-      const minRaw = t.minspeed || t["minspeed:forward"] || t["minspeed:backward"] || null;
+      const maxRaw =
+        t.maxspeed || t["maxspeed:forward"] || t["maxspeed:backward"] || null;
+      const minRaw =
+        t.minspeed || t["minspeed:forward"] || t["minspeed:backward"] || null;
       const hasAny = maxRaw || minRaw;
 
       let dist2 = 1e12;
@@ -160,14 +174,29 @@ async function queryOSMSpeeds(lat, lng) {
         source: "osm-overpass",
         wayId: best.wayId,
         highway: best.highway,
-        max: { value: maxParsed?.value ?? null, unit: "km/h", raw: best.maxRaw ?? null, fallbackUsed: false },
-        min: { value: minParsed?.value ?? null, unit: "km/h", raw: best.minRaw ?? null, fallbackUsed: false },
+        max: {
+          value: maxParsed?.value ?? null,
+          unit: "km/h",
+          raw: best.maxRaw ?? null,
+          fallbackUsed: false,
+        },
+        min: {
+          value: minParsed?.value ?? null,
+          unit: "km/h",
+          raw: best.minRaw ?? null,
+          fallbackUsed: false,
+        },
       };
 
       if (out.max.value == null) {
         const fb = FALLBACK_MAX_BY_HIGHWAY[out.highway] ?? null;
         if (fb != null) {
-          out.max = { value: fb, unit: "km/h", raw: null, fallbackUsed: true };
+          out.max = {
+            value: fb,
+            unit: "km/h",
+            raw: null,
+            fallbackUsed: true,
+          };
         }
       }
       setCache(k, out);
@@ -179,15 +208,23 @@ async function queryOSMSpeeds(lat, lng) {
 
 // ===== REST: GET /limit & POST /compare =====
 app.get("/limit", async (req, res) => {
-  const lat = parseFloat(req.query.lat), lng = parseFloat(req.query.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ error: "invalid_lat_lng" });
+  const lat = parseFloat(req.query.lat),
+    lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng))
+    return res.status(400).json({ error: "invalid_lat_lng" });
   try {
     const r = await queryOSMSpeeds(lat, lng);
     if (!r) return res.status(404).json({ error: "no_highway_or_no_data" });
     return res.json({
-      source: r.source, wayId: r.wayId, highway: r.highway,
-      maxspeed: r.max.value, maxRaw: r.max.raw, maxFallbackUsed: r.max.fallbackUsed,
-      minspeed: r.min.value, minRaw: r.min.raw, minFallbackUsed: r.min.fallbackUsed,
+      source: r.source,
+      wayId: r.wayId,
+      highway: r.highway,
+      maxspeed: r.max.value,
+      maxRaw: r.max.raw,
+      maxFallbackUsed: r.max.fallbackUsed,
+      minspeed: r.min.value,
+      minRaw: r.min.raw,
+      minFallbackUsed: r.min.fallbackUsed,
       unit: "km/h",
     });
   } catch (e) {
@@ -199,12 +236,20 @@ app.get("/limit", async (req, res) => {
 app.post("/compare", async (req, res) => {
   const { lat, lng, speedKmh, margin } = req.body || {};
   const peer = req.socket?.remoteAddress || "http";
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(speedKmh)) {
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    !Number.isFinite(speedKmh)
+  ) {
     log("REST  IN ", peer, "invalid_payload:", req.body);
     return res.status(400).json({ error: "invalid_payload" });
   }
   const marginKmh = Number.isFinite(margin) ? margin : DEFAULT_MARGIN;
-  log("REST  IN ", peer, { pos: shortCoord(lat, lng), speedKmh: round(speedKmh), margin: marginKmh });
+  log("REST  IN ", peer, {
+    pos: shortCoord(lat, lng),
+    speedKmh: round(speedKmh),
+    margin: marginKmh,
+  });
 
   try {
     const r = await queryOSMSpeeds(lat, lng);
@@ -213,10 +258,11 @@ app.post("/compare", async (req, res) => {
       return res.status(404).json({ error: "no_highway_or_no_data" });
     }
 
-    const limitMax = r.max.value;    // km/h
-    const limitMin = r.min.value;    // km/h (thường null)
-    const overMax  = limitMax != null ? (speedKmh > limitMax + marginKmh) : false;
-    const underMin = limitMin != null ? (speedKmh < Math.max(0, limitMin - marginKmh)) : false;
+    const limitMax = r.max.value; // km/h
+    const limitMin = r.min.value; // km/h (thường null)
+    const overMax = limitMax != null ? speedKmh > limitMax + marginKmh : false;
+    const underMin =
+      limitMin != null ? speedKmh < Math.max(0, limitMin - marginKmh) : false;
 
     const payload = {
       limitKmh: limitMax,
@@ -225,10 +271,17 @@ app.post("/compare", async (req, res) => {
       underMin,
       highway: r.highway,
       unit: "km/h",
-      note:
-        (r.min.value == null ? "Không có minspeed trong OSM. " : "")
+      note: r.min.value == null ? "Không có minspeed trong OSM. " : "",
     };
-    log("REST OUT", peer, { limitKmh: payload.limitKmh, minKmh: payload.minKmh, overMax, underMin, highway: payload.highway, fbMax: r.max.fallbackUsed, fbMin: r.min.fallbackUsed });
+    log("REST OUT", peer, {
+      limitKmh: payload.limitKmh,
+      minKmh: payload.minKmh,
+      overMax,
+      underMin,
+      highway: payload.highway,
+      fbMax: r.max.fallbackUsed,
+      fbMin: r.min.fallbackUsed,
+    });
     return res.json(payload);
   } catch (e) {
     console.error(e);
@@ -244,18 +297,21 @@ app.get("/history", async (req, res) => {
 
   let query = {};
   const from = req.query.from ? new Date(req.query.from) : null;
-  const to   = req.query.to   ? new Date(req.query.to)   : null;
-  const plate = req.query.plate ? String(req.query.plate).trim().toUpperCase() : null;
-if (plate) query.licensePlate = plate;
+  const to = req.query.to ? new Date(req.query.to) : null;
+  const plate = req.query.plate
+    ? String(req.query.plate).trim().toUpperCase()
+    : null;
+  if (plate) query.licensePlate = plate;
 
   if (from || to) {
     query.timestamp = {};
     if (from) query.timestamp.$gte = from;
-    if (to)   query.timestamp.$lte = to;
+    if (to) query.timestamp.$lte = to;
   }
 
   try {
-    const docs = await telemetryCol.find(query)
+    const docs = await telemetryCol
+      .find(query)
       .sort({ timestamp: -1 })
       .limit(limit)
       .toArray();
@@ -288,7 +344,110 @@ app.get("/plates", async (req, res) => {
   }
 });
 
+// ===== REST: GET /alert-stats – thống kê cảnh báo theo ngày =====
+// /alert-stats?plate=72F-345.67&from=2025-12-01&to=2025-12-08
+app.get("/alert-stats", async (req, res) => {
+  if (!telemetryCol) return res.status(503).json({ error: "mongo_not_ready" });
 
+  try {
+    const plate = (req.query.plate || "").toString().trim().toUpperCase();
+    if (!plate) {
+      return res.status(400).json({ error: "missing_plate" });
+    }
+
+    const fromStr = (req.query.from || "").toString().trim();
+    const toStr = (req.query.to || "").toString().trim();
+
+    let startDate = null;
+    let endDate = null;
+
+    if (fromStr) {
+      // Nếu chỉ gửi ngày (YYYY-MM-DD), mặc định là đầu ngày VN
+      if (fromStr.length === 10) {
+        startDate = new Date(fromStr + "T00:00:00+07:00");
+      } else {
+        // Nếu gửi full ngày giờ (ISO), dùng luôn
+        startDate = new Date(fromStr);
+      }
+    }
+
+    if (toStr) {
+       // Nếu chỉ gửi ngày, mặc định là hết ngày (đầu ngày hôm sau)
+      if (toStr.length === 10) {
+        const tmp = new Date(toStr + "T00:00:00+07:00");
+        endDate = new Date(tmp.getTime() + 24 * 3600 * 1000); 
+      } else {
+        endDate = new Date(toStr);
+      }
+    }
+
+    const match = { licensePlate: plate };
+    if (startDate || endDate) {
+      match.timestamp = {};
+      if (startDate) match.timestamp.$gte = startDate;
+      if (endDate) match.timestamp.$lt = endDate;
+    }
+
+    const pipeline = [
+      { $match: match },
+      {
+        $project: {
+          // group theo ngày LOCAL VN
+          day: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$timestamp",
+              timezone: "Asia/Ho_Chi_Minh",
+            },
+          },
+          speedAlert: {
+            $cond: [{ $or: ["$overMax", "$underMin"] }, 1, 0],
+          },
+          pressureAlert: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$pressureBar", null] },
+                  {
+                    $or: [
+                      { $gt: ["$pressureBar", PRESSURE_MAX_BAR] },
+                      { $lt: ["$pressureBar", PRESSURE_MIN_BAR] },
+                    ],
+                  },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$day",
+          speedAlerts: { $sum: "$speedAlert" },
+          pressureAlerts: { $sum: "$pressureAlert" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          day: "$_id",
+          speedAlerts: 1,
+          pressureAlerts: 1,
+          totalAlerts: { $add: ["$speedAlerts", "$pressureAlerts"] },
+        },
+      },
+      { $sort: { day: 1 } },
+    ];
+
+    const stats = await telemetryCol.aggregate(pipeline).toArray();
+    res.json(stats);
+  } catch (err) {
+    console.error("[/alert-stats] error:", err);
+    res.status(500).json({ error: "server_error" });
+  }
+});
 
 // ====== WebSocket ======
 const wss = new WebSocketServer({ noServer: true });
@@ -329,10 +488,16 @@ wss.on("connection", (ws, req) => {
     if (ws.clientType === "unknown") ws.clientType = "device";
 
     const { lat, lng, speedKmh, margin, pressureBar } = payload || {};
-const plateRaw = (payload.licensePlate || payload.plate || "").toString().trim();
-const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
+    const plateRaw = (payload.licensePlate || payload.plate || "")
+      .toString()
+      .trim();
+    const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(speedKmh)) {
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      !Number.isFinite(speedKmh)
+    ) {
       log("WS  IN  ", `#${ws.id}`, ws.peer, "invalid_payload:", payload);
       return ws.send(JSON.stringify({ error: "invalid_payload" }));
     }
@@ -342,7 +507,11 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
     ws.lastHandledAt = now;
 
     const marginKmh = Number.isFinite(margin) ? margin : DEFAULT_MARGIN;
-    log("WS  IN  ", `#${ws.id}`, ws.peer, { pos: shortCoord(lat, lng), speedKmh: round(speedKmh), margin: marginKmh });
+    log("WS  IN  ", `#${ws.id}`, ws.peer, {
+      pos: shortCoord(lat, lng),
+      speedKmh: round(speedKmh),
+      margin: marginKmh,
+    });
 
     try {
       const r = await queryOSMSpeeds(lat, lng);
@@ -353,11 +522,12 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
 
       const limitMax = r.max.value;
       const limitMin = r.min.value;
-      const overMax  = limitMax != null ? (speedKmh > limitMax + marginKmh) : false;
-      const underMin = limitMin != null ? (speedKmh < Math.max(0, limitMin - marginKmh)) : false;
+      const overMax =
+        limitMax != null ? speedKmh > limitMax + marginKmh : false;
+      const underMin =
+        limitMin != null ? speedKmh < Math.max(0, limitMin - marginKmh) : false;
 
-      const note =
-        (r.min.value == null ? "Không có minspeed. " : "")
+      const note = r.min.value == null ? "Không có minspeed. " : "";
 
       const out = {
         type: "compare_result",
@@ -367,7 +537,7 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
         underMin,
         highway: r.highway,
         unit: "km/h",
-        note
+        note,
       };
 
       // ==== Lưu vào MongoDB ====
@@ -384,7 +554,7 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
           underMin,
           highway: r.highway || null,
           note,
-          licensePlate
+          licensePlate,
         };
         try {
           await telemetryCol.insertOne(doc);
@@ -417,7 +587,7 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
         underMin,
         highway: out.highway,
         fbMax: r.max.fallbackUsed,
-        fbMin: r.min.fallbackUsed
+        fbMin: r.min.fallbackUsed,
       });
 
       // Gửi lại cho ESP32
@@ -429,7 +599,15 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
   });
 
   ws.on("close", (code, reason) => {
-    log("WS CLOSE", `#${ws.id}`, ws.peer, "code:", code, "reason:", reason?.toString?.() || "");
+    log(
+      "WS CLOSE",
+      `#${ws.id}`,
+      ws.peer,
+      "code:",
+      code,
+      "reason:",
+      reason?.toString?.() || ""
+    );
   });
 });
 
@@ -437,13 +615,16 @@ const licensePlate = plateRaw ? plateRaw.toUpperCase() : null;
 const interval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();
-    ws.isAlive = false; ws.ping();
+    ws.isAlive = false;
+    ws.ping();
   });
 }, 30000);
 
 server.on("upgrade", (req, socket, head) => {
   if (req.url === "/ws") {
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    wss.handleUpgrade(req, socket, head, (ws) =>
+      wss.emit("connection", ws, req)
+    );
   } else {
     socket.destroy();
   }
@@ -451,5 +632,5 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(PORT, () => {
   log(`HTTP: http://localhost:${PORT}   WS: ws://localhost:${PORT}/ws`);
-  initMongo();   // Khởi động MongoDB sau khi server listen
+  initMongo(); // Khởi động MongoDB sau khi server listen
 });

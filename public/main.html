@@ -314,22 +314,22 @@
               class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
             >
               <div class="stat-card">
-  <div class="flex items-center justify-between mb-2">
-    <span class="text-gray-600 text-sm font-semibold">
-      Xe đang theo dõi
-    </span>
-    <span class="text-2xl">🚗</span>
-  </div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-gray-600 text-sm font-semibold">
+                    Xe đang theo dõi
+                  </span>
+                  <span class="text-2xl">🚗</span>
+                </div>
 
-  <!-- CHỖ NÀY HIỂN BIỂN SỐ -->
-  <div class="text-3xl font-bold text-gray-800" id="activeVehiclePlate">
-    --
-  </div>
+                <div
+                  class="text-3xl font-bold text-gray-800"
+                  id="activeVehiclePlate"
+                >
+                  --
+                </div>
 
-  <div class="text-xs text-green-600 mt-1">
-    Biển số
-  </div>
-</div>
+                <div class="text-xs text-green-600 mt-1">Biển số</div>
+              </div>
               <div class="stat-card">
                 <div class="flex items-center justify-between mb-2">
                   <span class="text-gray-600 text-sm font-semibold"
@@ -341,7 +341,7 @@
                   0
                 </div>
                 <div class="text-xs text-orange-600 mt-1" id="alertStatus">
-                  Không có cảnh báo
+                  Không có cảnh báo hôm nay
                 </div>
               </div>
               <div class="stat-card">
@@ -373,7 +373,19 @@
               </div>
             </div>
 
-            <!-- CHART + MAP -->
+            <!-- MAP -->
+            <div class="chart-container mb-8">
+              <h3 class="text-lg font-bold text-gray-800 mb-4">
+                Vị trí xe trên bản đồ
+              </h3>
+              <div
+                id="vehicleMap"
+                class="w-full rounded-lg"
+                style="min-height: 320px"
+              ></div>
+            </div>
+
+            <!-- CHART -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <div class="chart-container">
                 <h3 class="text-lg font-bold text-gray-800 mb-4">
@@ -398,17 +410,6 @@
                 </div>
               </div>
             </div>
-
-            <div class="chart-container">
-              <h3 class="text-lg font-bold text-gray-800 mb-4">
-                Vị trí xe trên bản đồ
-              </h3>
-              <div
-                id="vehicleMap"
-                class="w-full rounded-lg"
-                style="min-height: 320px"
-              ></div>
-            </div>
           </div>
 
           <!-- HISTORY PAGE -->
@@ -421,34 +422,38 @@
             </div>
             <div class="chart-container mb-6">
               <h3 class="text-lg font-bold text-gray-800 mb-4">Bộ lọc</h3>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+              <div class="flex flex-wrap gap-4 items-end mb-4">
+                <div class="flex-shrink-0">
                   <label class="block text-sm font-semibold text-gray-700 mb-2"
                     >Xe đang xem</label
                   >
                   <div
                     id="historyCurrentPlate"
-                    class="px-3 py-2 rounded-lg bg-gray-100 text-sm text-gray-700"
+                    class="px-3 py-2 rounded-lg bg-gray-100 text-sm text-gray-700 h-10 flex items-center"
                   >
                     Chưa chọn xe
                   </div>
                 </div>
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2"
-                    >Từ ngày</label
-                  >
-                  <input type="date" id="historyDateFrom" class="form-input" />
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ ngày</label>
+                  <input type="date" id="historyDateFrom" class="form-input h-10" style="width: 140px;" />
                 </div>
-                <div>
-                  <label class="block text-sm font-semibold text-gray-700 mb-2"
-                    >Đến ngày</label
-                  >
-                  <input type="date" id="historyDateTo" class="form-input" />
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ giờ</label>
+                  <input type="time" id="historyTimeFrom" class="form-input h-10" style="width: 120px;" />
                 </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến ngày</label>
+                  <input type="date" id="historyDateTo" class="form-input h-10" style="width: 140px;" />
+                </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến giờ</label>
+                  <input type="time" id="historyTimeTo" class="form-input h-10" style="width: 120px;" />
+                </div>
+                <button id="applyHistoryFilter" class="btn-primary h-10 flex-shrink-0">
+                  Áp dụng
+                </button>
               </div>
-              <button id="applyHistoryFilter" class="btn-primary mt-4">
-                Áp dụng bộ lọc
-              </button>
             </div>
             <div class="chart-container">
               <h3 class="text-lg font-bold text-gray-800 mb-4">
@@ -471,9 +476,69 @@
                 Các cảnh báo về tốc độ và áp suất lốp của xe đang xem
               </p>
             </div>
-            <div id="alertsList" class="space-y-4">
-              <div class="text-center py-12 text-gray-400">
-                Không có cảnh báo nào
+
+            <!-- Bộ lọc thống kê theo ngày -->
+            <div class="chart-container mb-6">
+              <h3 class="text-lg font-bold text-gray-800 mb-4">
+                Thống kê cảnh báo theo ngày
+              </h3>
+              <div class="flex flex-wrap gap-4 items-end mb-4">
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    Xe đang xem
+                  </label>
+                  <div
+                    id="alertStatsCurrentPlate"
+                    class="px-3 py-2 rounded-lg bg-gray-100 text-sm text-gray-700 h-10 flex items-center"
+                  >
+                    Chưa chọn xe
+                  </div>
+                </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    Từ ngày
+                  </label>
+                  <input type="date" id="alertStatsFrom" class="form-input h-10" style="width: 140px;" />
+                </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Từ giờ</label>
+                  <input type="time" id="alertStatsTimeFrom" class="form-input h-10" style="width: 120px;" />
+                </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    Đến ngày
+                  </label>
+                  <input type="date" id="alertStatsTo" class="form-input h-10" style="width: 140px;" />
+                </div>
+                <div class="flex-shrink-0">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Đến giờ</label>
+                  <input type="time" id="alertStatsTimeTo" class="form-input h-10" style="width: 120px;" />
+                </div>
+                <button id="btnAlertStatsApply" class="btn-primary h-10 flex-shrink-0">
+                  Áp dụng
+                </button>
+              </div>
+            </div>
+
+            <!-- Biểu đồ thống kê -->
+            <div class="chart-container mb-6">
+              <h3 class="text-lg font-bold text-gray-800 mb-4">
+                Biểu đồ số lần cảnh báo
+              </h3>
+              <div class="h-80">
+                <canvas id="alertStatsChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Danh sách cảnh báo gần đây -->
+            <div class="chart-container">
+              <h3 class="text-lg font-bold text-gray-800 mb-4">
+                Danh sách cảnh báo gần đây
+              </h3>
+              <div id="alertsList" class="space-y-4">
+                <div class="text-center py-12 text-gray-400">
+                  Không có cảnh báo nào
+                </div>
               </div>
             </div>
           </div>
@@ -493,6 +558,10 @@
         background_color: "#f0f4f8",
         accent_color: "#ef4444",
       };
+
+      // Ngưỡng cảnh báo áp suất (khớp với main3.ino và server)
+      const PRESSURE_MIN_BAR = 1.0;
+      const PRESSURE_MAX_BAR = 2.0;
 
       const ACCOUNTS = [
         { username: "admin", password: "123456" },
@@ -520,10 +589,15 @@
       let speedChart;
       let pressureChart;
       let historyChartInstance;
+      let alertStatsChartInstance;
+
       let chartLabels = [];
       let chartSpeed = [];
       let chartPressure = [];
       const MAX_POINTS = 50;
+
+      let alertStatsData = [];
+      let todayAlertCount = 0;
 
       /* ===== INIT APP ===== */
       async function initApp() {
@@ -563,57 +637,99 @@
         mapInitialized = true;
       }
 
+      function resetVehicleMarker() {
+        if (vehicleMarker) {
+          map.removeLayer(vehicleMarker);
+          vehicleMarker = null;
+        }
+      }
+
       /* ===== LOAD DANH SÁCH BIỂN SỐ ===== */
       async function loadPlates() {
-  try {
-    const res = await fetch("/plates");
-    if (!res.ok) return;
-    const list = await res.json();
-    if (!Array.isArray(list)) return;
+        try {
+          const res = await fetch("/plates");
+          if (!res.ok) return;
+          const list = await res.json();
+          if (!Array.isArray(list)) return;
 
-    availablePlates = list;
+          availablePlates = list;
 
-    const select = document.getElementById("currentPlateSelect");
-    const historyLabel = document.getElementById("historyCurrentPlate");
-    const activeVehiclePlateEl = document.getElementById("activeVehiclePlate");
+          const select = document.getElementById("currentPlateSelect");
+          const historyLabel =
+            document.getElementById("historyCurrentPlate");
+          const activeVehiclePlateEl =
+            document.getElementById("activeVehiclePlate");
 
-    if (select) {
-      select.innerHTML = "";
-      list.forEach((plate) => {
-        const opt = document.createElement("option");
-        opt.value = plate;
-        opt.textContent = plate;
-        select.appendChild(opt);
-      });
+          if (select) {
+            select.innerHTML = "";
+            list.forEach((plate) => {
+              const opt = document.createElement("option");
+              opt.value = plate;
+              opt.textContent = plate;
+              select.appendChild(opt);
+            });
 
-      // auto chọn xe đầu tiên nếu chưa có
-      if (!selectedPlate && list.length > 0) {
-        selectedPlate = list[0];
+            // auto chọn xe đầu tiên nếu chưa có
+            if (!selectedPlate && list.length > 0) {
+              selectedPlate = list[0];
+            }
+            if (selectedPlate) {
+              select.value = selectedPlate;
+            }
+          }
+
+          // cập nhật label lịch sử
+          if (historyLabel) {
+            historyLabel.textContent = selectedPlate || "Chưa chọn xe";
+          }
+
+          // cập nhật card "Xe đang theo dõi"
+          if (activeVehiclePlateEl) {
+            activeVehiclePlateEl.textContent = selectedPlate || "--";
+          }
+
+          const alertPlateLabel = document.getElementById(
+            "alertStatsCurrentPlate"
+          );
+          if (alertPlateLabel) {
+            alertPlateLabel.textContent = selectedPlate || "Chưa chọn xe";
+          }
+        } catch (e) {
+          console.error("[Plates] load error:", e);
+        }
       }
-      if (selectedPlate) {
-        select.value = selectedPlate;
-      }
-    }
-
-    // cập nhật label lịch sử
-    if (historyLabel) {
-      historyLabel.textContent = selectedPlate || "Chưa chọn xe";
-    }
-
-    // 🔥 cập nhật luôn card "Xe đang theo dõi"
-    if (activeVehiclePlateEl) {
-      activeVehiclePlateEl.textContent = selectedPlate || "--";
-    }
-  } catch (e) {
-    console.error("[Plates] load error:", e);
-  }
-}
-
 
       /* ===== FORMAT THỜI GIAN & CHART REALTIME ===== */
       function formatTimeLabel(ts) {
         const d = new Date(ts);
         return d.toLocaleTimeString("vi-VN", { hour12: false });
+      }
+
+      function getLocalDateStr(ts) {
+        const d = new Date(ts);
+        if (isNaN(d)) return "";
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      function isSpeedAlert(sample) {
+        return !!(sample.overMax || sample.underMin);
+      }
+
+      function isPressureAlert(sample) {
+        const bar = sample.pressureBar;
+        if (typeof bar !== "number") return false;
+        return bar > PRESSURE_MAX_BAR || bar < PRESSURE_MIN_BAR;
+      }
+
+      function isAnyAlert(sample) {
+        return isSpeedAlert(sample) || isPressureAlert(sample);
+      }
+
+      function isToday(ts) {
+        return getLocalDateStr(ts) === getLocalDateStr(Date.now());
       }
 
       function initRealtimeCharts() {
@@ -691,6 +807,8 @@
                 data: chartPressure,
                 fill: false,
                 tension: 0.2,
+                borderColor: 'rgb(147, 51, 234)', // Màu tím
+                backgroundColor: 'rgba(147, 51, 234, 0.5)',
               },
             ],
           },
@@ -700,10 +818,8 @@
             scales: {
               x: { title: { display: true, text: "Thời gian" } },
               y: {
-                min: 0,
-                max: 3,
+                beginAtZero: true,
                 title: { display: true, text: "Áp suất (bar)" },
-                ticks: { stepSize: 0.5 },
               },
             },
           },
@@ -736,6 +852,18 @@
       }
 
       /* ===== LỊCH SỬ ===== */
+      function setDefaultHistoryDates() {
+        const fromInput = document.getElementById("historyDateFrom");
+        const toInput = document.getElementById("historyDateTo");
+        const now = Date.now();
+        const todayStr = getLocalDateStr(now);
+        const sevenAgo = new Date(now - 6 * 24 * 3600 * 1000);
+        const fromStr = getLocalDateStr(sevenAgo);
+
+        if (fromInput && !fromInput.value) fromInput.value = fromStr;
+        if (toInput && !toInput.value) toInput.value = todayStr;
+      }
+
       async function loadInitialHistory() {
         try {
           const historyLabel =
@@ -744,6 +872,9 @@
             historyLabel.textContent =
               selectedPlate || "Chưa chọn xe";
           }
+
+          // Set default dates nếu chưa được đặt
+          setDefaultHistoryDates();
 
           if (!selectedPlate) {
             telemetryAll = [];
@@ -755,21 +886,8 @@
             return;
           }
 
-          const params = new URLSearchParams({
-            limit: "500",
-            plate: selectedPlate,
-          });
-
-          const res = await fetch(`/history?${params.toString()}`);
-          if (!res.ok) {
-            initRealtimeCharts();
-            return;
-          }
-
-          const list = await res.json();
-          telemetryAll = Array.isArray(list) ? list : [];
-
-          applyHistoryFilter(true);
+          // Áp dụng bộ lọc (cũng sẽ lấy dữ liệu từ backend với ngày)
+          await applyHistoryFilter(true);
           initRealtimeCharts();
         } catch (e) {
           console.error("[History] load error:", e);
@@ -858,9 +976,6 @@
                 type: "linear",
                 position: "right",
                 title: { display: true, text: "Áp suất (bar)" },
-                min: 0,
-                max: 3,
-                ticks: { stepSize: 0.5 },
                 grid: { drawOnChartArea: false },
               },
             },
@@ -868,62 +983,258 @@
         });
       }
 
-      function getLocalDateStr(ts) {
-        const d = new Date(ts);
-        if (isNaN(d)) return "";
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      }
-
-      function applyHistoryFilter(initial = false) {
-        if (!Array.isArray(telemetryAll)) telemetryAll = [];
+      async function applyHistoryFilter(initial = false) {
+        if (!selectedPlate) {
+          telemetryHistory = [];
+          alertsHistory = [];
+          renderHistoryChart();
+          updateAlertsList();
+          return;
+        }
 
         const fromInput = document.getElementById("historyDateFrom");
         const toInput = document.getElementById("historyDateTo");
+        const fromTimeInput = document.getElementById("historyTimeFrom");
+        const toTimeInput = document.getElementById("historyTimeTo");
 
         const fromVal = fromInput && fromInput.value ? fromInput.value : "";
         const toVal = toInput && toInput.value ? toInput.value : "";
+        const fromTime = fromTimeInput && fromTimeInput.value ? fromTimeInput.value : "";
+        const toTime = toTimeInput && toTimeInput.value ? toTimeInput.value : "";
 
-        let filtered = telemetryAll.filter((item) => {
-          const ts = item.timestamp || item.ts || Date.now();
-          const day = getLocalDateStr(ts);
-          if (!day) return false;
-          if (fromVal && day < fromVal) return false;
-          if (toVal && day > toVal) return false;
-          if (selectedPlate && item.licensePlate) {
-            return item.licensePlate === selectedPlate;
-          }
-          return true;
+        // Xây dựng tham số query gửi lên backend
+        const params = new URLSearchParams({
+          plate: selectedPlate,
+          limit: "1000",
         });
 
-        filtered.sort(
-          (a, b) =>
-            new Date(a.timestamp || a.ts || 0) -
-            new Date(b.timestamp || b.ts || 0)
-        );
-
-        if (filtered.length > MAX_POINTS) {
-          filtered = filtered.slice(filtered.length - MAX_POINTS);
+        if (fromVal) {
+          // Nếu có giờ:phút, kết hợp vào datetime
+          let fromDateTime = fromVal;
+          if (fromTime) {
+            fromDateTime = `${fromVal}T${fromTime}:00`;
+          }
+          params.set("from", fromDateTime);
         }
 
-        telemetryHistory = filtered;
+        if (toVal) {
+          let toDateTime = toVal;
+          if (toTime) {
+            toDateTime = `${toVal}T${toTime}:00`;
+          } else {
+            // Nếu không có giờ, thêm 1 ngày để include toàn bộ ngày cuối
+            const endDate = new Date(toVal);
+            endDate.setDate(endDate.getDate() + 1);
+            toDateTime = endDate.toISOString().split("T")[0];
+          }
+          params.set("to", toDateTime);
+        }
 
-        // rebuild alerts list từ lịch sử
-        alertsHistory = telemetryHistory.filter(
-          (s) => s.overMax || s.underMin
-        );
-        updateAlertsList();
+        try {
+          const res = await fetch(`/history?${params.toString()}`);
+          if (!res.ok) {
+            telemetryHistory = [];
+            alertsHistory = [];
+            renderHistoryChart();
+            updateAlertsList();
+            if (!initial) {
+              showToast("Lỗi khi tải dữ liệu từ server", "error");
+            }
+            return;
+          }
 
-        renderHistoryChart();
+          let filtered = await res.json();
+          filtered = Array.isArray(filtered) ? filtered : [];
 
-        if (!initial && telemetryHistory.length === 0) {
-          showToast(
-            "Không có dữ liệu trong khoảng thời gian đã chọn",
-            "error"
+          // Sắp xếp theo thời gian tăng dần
+          filtered.sort(
+            (a, b) =>
+              new Date(a.timestamp || a.ts || 0) -
+              new Date(b.timestamp || b.ts || 0)
           );
+
+          // Giới hạn số điểm để chart không bị quá tải
+          if (filtered.length > MAX_POINTS) {
+            filtered = filtered.slice(filtered.length - MAX_POINTS);
+          }
+
+          telemetryHistory = filtered;
+
+          // Rebuild alerts list từ lịch sử
+          alertsHistory = telemetryHistory.filter((s) => isAnyAlert(s));
+          updateAlertsList();
+
+          renderHistoryChart();
+
+          if (!initial && telemetryHistory.length === 0) {
+            showToast(
+              "Không có dữ liệu trong khoảng thời gian đã chọn",
+              "info"
+            );
+          }
+        } catch (e) {
+          console.error("[ApplyHistoryFilter] error:", e);
+          telemetryHistory = [];
+          alertsHistory = [];
+          renderHistoryChart();
+          updateAlertsList();
+          if (!initial) {
+            showToast("Lỗi khi tải dữ liệu", "error");
+          }
         }
+      }
+
+      /* ===== ALERT-STATS (thống kê theo ngày) ===== */
+      function setDefaultAlertStatsDates() {
+        const fromInput = document.getElementById("alertStatsFrom");
+        const toInput = document.getElementById("alertStatsTo");
+        const now = Date.now();
+        const todayStr = getLocalDateStr(now);
+        const sevenAgo = new Date(now - 6 * 24 * 3600 * 1000);
+        const fromStr = getLocalDateStr(sevenAgo);
+
+        if (fromInput && !fromInput.value) fromInput.value = fromStr;
+        if (toInput && !toInput.value) toInput.value = todayStr;
+      }
+
+      async function loadAlertStatsRange() {
+        if (!selectedPlate) return;
+
+        const labelEl = document.getElementById("alertStatsCurrentPlate");
+        if (labelEl) labelEl.textContent = selectedPlate;
+
+        const fromInput = document.getElementById("alertStatsFrom");
+        const toInput = document.getElementById("alertStatsTo");
+        const fromTimeInput = document.getElementById("alertStatsTimeFrom");
+        const toTimeInput = document.getElementById("alertStatsTimeTo");
+
+        const fromVal = fromInput && fromInput.value ? fromInput.value : "";
+        const toVal = toInput && toInput.value ? toInput.value : "";
+        const fromTime = fromTimeInput && fromTimeInput.value ? fromTimeInput.value : "";
+        const toTime = toTimeInput && toTimeInput.value ? toTimeInput.value : "";
+
+        const params = new URLSearchParams({ plate: selectedPlate });
+        
+        if (fromVal) {
+          let fromDateTime = fromVal;
+          if (fromTime) {
+            fromDateTime = `${fromVal}T${fromTime}:00`;
+          }
+          params.set("from", fromDateTime);
+        }
+        
+        if (toVal) {
+          let toDateTime = toVal;
+          if (toTime) {
+            toDateTime = `${toVal}T${toTime}:00`;
+          }
+          params.set("to", toDateTime);
+        }
+
+        try {
+          const res = await fetch(`/alert-stats?${params.toString()}`);
+          if (!res.ok) {
+            console.warn("[AlertStats] HTTP", res.status);
+            return;
+          }
+          const data = await res.json();
+          alertStatsData = Array.isArray(data) ? data : [];
+          renderAlertStatsChart();
+        } catch (e) {
+          console.error("[AlertStats] load error:", e);
+        }
+      }
+
+      async function loadTodayAlertStats() {
+        if (!selectedPlate) {
+          todayAlertCount = 0;
+          updateAlertCard();
+          return;
+        }
+        const todayStr = getLocalDateStr(Date.now());
+        const params = new URLSearchParams({
+          plate: selectedPlate,
+          from: todayStr,
+          to: todayStr,
+        });
+        try {
+          const res = await fetch(`/alert-stats?${params.toString()}`);
+          if (!res.ok) {
+            todayAlertCount = 0;
+            updateAlertCard();
+            return;
+          }
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            todayAlertCount = data[0].totalAlerts || 0;
+          } else {
+            todayAlertCount = 0;
+          }
+          updateAlertCard();
+        } catch (e) {
+          console.error("[AlertStatsToday] load error:", e);
+          todayAlertCount = 0;
+          updateAlertCard();
+        }
+      }
+
+      function renderAlertStatsChart() {
+        const canvas = document.getElementById("alertStatsChart");
+        if (!canvas) return;
+
+        if (!alertStatsData.length) {
+          if (alertStatsChartInstance) {
+            alertStatsChartInstance.destroy();
+            alertStatsChartInstance = null;
+          }
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return;
+        }
+
+        const labels = alertStatsData.map((d) => d.day);
+        const speed = alertStatsData.map((d) => d.speedAlerts || 0);
+        const press = alertStatsData.map((d) => d.pressureAlerts || 0);
+        const totals = alertStatsData.map((d) => d.totalAlerts || 0);
+
+        const ctx = canvas.getContext("2d");
+        if (alertStatsChartInstance) {
+          alertStatsChartInstance.destroy();
+        }
+
+        alertStatsChartInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Cảnh báo tốc độ",
+                data: speed,
+              },
+              {
+                label: "Cảnh báo áp suất",
+                data: press,
+              },
+              {
+                label: "Tổng cảnh báo",
+                data: totals,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { title: { display: true, text: "Ngày" } },
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: "Số lần cảnh báo" },
+                ticks: { stepSize: 1 },
+              },
+            },
+          },
+        });
       }
 
       /* ===== WEBSOCKET ===== */
@@ -956,14 +1267,16 @@
                 return;
               }
 
-              telemetryAll.push(data);
+              // Chỉ update realtime data, không gọi applyHistoryFilter
+              // (vì applyHistoryFilter bây giờ gọi API backend)
               updateRealtimeFromTelemetry(data);
-              applyHistoryFilter(false);
 
-              if (data.overMax || data.underMin) {
-                alertsHistory.push(data);
-                if (alertsHistory.length > 100) alertsHistory.shift();
-                updateAlertsList();
+              if (isAnyAlert(data)) {
+                // Chỉ thêm vào alert today counter nếu là hôm nay
+                if (isToday(data.timestamp || data.ts || Date.now())) {
+                  todayAlertCount += 1;
+                  updateAlertCard();
+                }
               }
             }
           } catch (e) {
@@ -981,11 +1294,32 @@
       }
 
       /* ===== UPDATE DASHBOARD TỪ 1 MẪU ===== */
+      function updateAlertCard() {
+        const alertCountEl = document.getElementById("alertCount");
+        const alertStatusEl = document.getElementById("alertStatus");
+
+        if (alertCountEl) {
+          alertCountEl.textContent = String(todayAlertCount);
+        }
+
+        if (alertStatusEl) {
+          if (todayAlertCount > 0) {
+            alertStatusEl.textContent = "Có cảnh báo hôm nay";
+            alertStatusEl.className = "text-xs text-orange-600 mt-1";
+          } else {
+            alertStatusEl.textContent = "Không có cảnh báo hôm nay";
+            alertStatusEl.className = "text-xs text-green-600 mt-1";
+          }
+        }
+      }
+
       function updateRealtimeFromTelemetry(item) {
+        // Đảm bảo chart đã được tạo
         if (!speedChart || !pressureChart) {
           initRealtimeCharts();
         }
 
+        // Đẩy điểm mới vào 2 đồ thị realtime
         pushTelemetryToCharts(item);
 
         const speed = item.speedKmh ?? 0;
@@ -993,34 +1327,11 @@
 
         const avgSpeedEl = document.getElementById("avgSpeed");
         const avgPressureEl = document.getElementById("avgPressure");
-        const activeVehiclePlateEl = document.getElementById("activeVehiclePlate");
-        const alertCountEl = document.getElementById("alertCount");
-        const alertStatusEl = document.getElementById("alertStatus");
 
         if (avgSpeedEl) avgSpeedEl.textContent = speed.toFixed(1);
         if (avgPressureEl) avgPressureEl.textContent = bar.toFixed(2);
 
-        if (activeVehiclePlateEl) {
-  // ưu tiên biển số đang chọn, fallback sang biển trong gói tin
-  activeVehiclePlateEl.textContent =
-    selectedPlate || item.licensePlate || "--";
-}
-
-        const hasAlert = item.overMax || item.underMin;
-        if (alertCountEl) alertCountEl.textContent = hasAlert ? "1" : "0";
-
-        if (alertStatusEl) {
-          if (hasAlert) {
-            alertStatusEl.textContent = "Có cảnh báo";
-            alertStatusEl.className =
-              "text-xs text-orange-600 mt-1";
-          } else {
-            alertStatusEl.textContent = "Không có cảnh báo";
-            alertStatusEl.className =
-              "text-xs text-green-600 mt-1";
-          }
-        }
-
+        // cập nhật map
         const lat = typeof item.lat === "number" ? item.lat : null;
         const lng = typeof item.lng === "number" ? item.lng : null;
 
@@ -1028,13 +1339,18 @@
           if (!mapInitialized) {
             initVehicleMap(lat, lng);
           }
+
           const pos = [lat, lng];
+
           if (!vehicleMarker) {
             vehicleMarker = L.marker(pos).addTo(map);
-            vehicleMarker.bindPopup("Vị trí hiện tại của xe");
+            vehicleMarker.bindPopup(
+              item.licensePlate || "Vị trí hiện tại của xe"
+            );
           } else {
             vehicleMarker.setLatLng(pos);
           }
+
           map.setView(pos, map.getZoom() || 14);
         }
       }
@@ -1060,9 +1376,19 @@
             const timeStr = t.toLocaleString("vi-VN", {
               hour12: false,
             });
-            const reason = a.overMax
-              ? "Vượt quá tốc độ cho phép"
-              : "Chưa đạt tốc độ tối thiểu";
+
+            const speedFlag = isSpeedAlert(a);
+            const pressFlag = isPressureAlert(a);
+            let reason = "";
+            if (speedFlag && pressFlag) {
+              reason = "Cảnh báo tốc độ và áp suất";
+            } else if (speedFlag) {
+              reason = "Cảnh báo tốc độ";
+            } else if (pressFlag) {
+              reason = "Cảnh báo áp suất lốp";
+            } else {
+              reason = "Cảnh báo";
+            }
 
             return `
               <div class="alert-item">
@@ -1133,25 +1459,56 @@
               historyLabel.textContent =
                 selectedPlate || "Chưa chọn xe";
             }
-            const activeVehiclePlateEl = document.getElementById("activeVehiclePlate");
-  if (activeVehiclePlateEl) {
-    activeVehiclePlateEl.textContent = selectedPlate || "--";
-  }
+            const activeVehiclePlateEl =
+              document.getElementById("activeVehiclePlate");
+            if (activeVehiclePlateEl) {
+              activeVehiclePlateEl.textContent = selectedPlate || "--";
+            }
+            const alertPlateLabel = document.getElementById(
+              "alertStatsCurrentPlate"
+            );
+            if (alertPlateLabel) {
+              alertPlateLabel.textContent =
+                selectedPlate || "Chưa chọn xe";
+            }
+
+            // Reset dữ liệu tốc độ & áp suất khi chuyển xe
+            const avgSpeedEl = document.getElementById("avgSpeed");
+            const avgPressureEl = document.getElementById("avgPressure");
+            if (avgSpeedEl) avgSpeedEl.textContent = "0";
+            if (avgPressureEl) avgPressureEl.textContent = "0";
+
+            // Reset marker trên bản đồ
+            if (mapInitialized) {
+              resetVehicleMarker();
+            }
 
             telemetryAll = [];
             telemetryHistory = [];
             alertsHistory = [];
+            todayAlertCount = 0;
             initRealtimeCharts();
             renderHistoryChart();
             updateAlertsList();
+            updateAlertCard();
 
             await loadInitialHistory();
+            await loadTodayAlertStats();
+            await loadAlertStatsRange();
 
             if (selectedPlate && latestByPlate[selectedPlate]) {
               updateRealtimeFromTelemetry(
                 latestByPlate[selectedPlate]
               );
             }
+          });
+        }
+
+        const btnAlertStatsApply =
+          document.getElementById("btnAlertStatsApply");
+        if (btnAlertStatsApply) {
+          btnAlertStatsApply.addEventListener("click", () => {
+            loadAlertStatsRange();
           });
         }
       }
@@ -1180,7 +1537,10 @@
         showToast(`Đăng nhập thành công: ${username}`, "success");
 
         await loadPlates();
+        setDefaultAlertStatsDates();
         await loadInitialHistory();
+        await loadTodayAlertStats();
+        await loadAlertStatsRange();
 
         setTimeout(() => {
           initVehicleMap();
@@ -1216,9 +1576,13 @@
 
       function showToast(message, type = "success") {
         const toast = document.createElement("div");
-        toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50 ${
-          type === "success" ? "bg-green-500" : "bg-red-500"
-        }`;
+        const bgColor = {
+          success: "bg-green-500",
+          error: "bg-red-500",
+          info: "bg-blue-500",
+        }[type] || "bg-blue-500";
+        
+        toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50 ${bgColor}`;
         toast.textContent = message;
         document.body.appendChild(toast);
 
