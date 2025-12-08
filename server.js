@@ -75,7 +75,7 @@ const getCache = (k) => {
 };
 
 // Logging helpers
-const ts = () => new Date().toISOString();
+const ts = () => new Date().toLocaleString("vi-VN", { hour12: false });
 const log = (...args) => console.log(`[${ts()}]`, ...args);
 const round = (x, d = 3) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
 const shortCoord = (lat, lng) => `${round(lat, 5)},${round(lng, 5)}`;
@@ -266,21 +266,28 @@ if (plate) query.licensePlate = plate;
   }
 });
 
-app.get("/check-plate", async (req, res) => {
+// ===== REST: GET /plates – danh sách biển số đang có trong DB =====
+app.get("/plates", async (req, res) => {
   if (!telemetryCol) return res.status(503).json({ error: "mongo_not_ready" });
 
-  const plate = (req.query.plate || "").toString().trim().toUpperCase();
-  if (!plate) return res.status(400).json({ error: "missing_plate" });
-
   try {
-    // Chỉ cần xe nào đã từng gửi data là coi như biển số hợp lệ
-    const doc = await telemetryCol.findOne({ licensePlate: plate });
-    return res.json({ exists: !!doc });
+    const plates = await telemetryCol.distinct("licensePlate", {
+      licensePlate: { $ne: null },
+    });
+
+    // lọc null / rỗng + sort
+    const clean = plates
+      .map((p) => String(p || "").trim())
+      .filter((p) => p.length > 0)
+      .sort();
+
+    res.json(clean);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: "server_error" });
+    res.status(500).json({ error: "server_error" });
   }
 });
+
 
 
 // ====== WebSocket ======
